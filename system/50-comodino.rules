@@ -1,0 +1,17 @@
+// L'utente kiosk "comodino" può gestire il Wi-Fi (NetworkManager)
+// e riavviare/spegnere il tablet dal pannello, senza password.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "comodino") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0) {
+        return polkit.Result.YES;
+    }
+    if (action.id === "org.freedesktop.login1.reboot" ||
+        action.id === "org.freedesktop.login1.reboot-multiple-sessions" ||
+        action.id === "org.freedesktop.login1.power-off" ||
+        action.id === "org.freedesktop.login1.power-off-multiple-sessions") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

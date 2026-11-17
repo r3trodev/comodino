@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+# Debian 13 "trixie": kernel recente, meglio per i Cherry Trail (audio, touch, Wi-Fi).
+# grub-efi su amd64 genera sia bootx64.efi sia bootia32.efi (se sull'host di build
+# è installato grub-efi-ia32-bin): il Chuwi Hi10 Pro ha un firmware UEFI a 32 bit.
+lb config noauto \
+    --distribution trixie \
+    --architectures amd64 \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --binary-images iso-hybrid \
+    --bootloaders "grub-efi" \
+    --debian-installer live \
+    --debian-installer-gui false \
+    --firmware-binary true \
+    --firmware-chroot true \
+    --iso-volume "COMODINO" \
+    --iso-application "Comodino" \
+    --bootappend-live "boot=live components quiet splash live-config.noautologin live-config.locales=it_IT.UTF-8 live-config.keyboard-layouts=it live-config.timezone=Europe/Rome" \
+    "${@}"

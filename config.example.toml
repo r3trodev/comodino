@@ -1,0 +1,58 @@
+# Copia questo file in config.toml e compilalo.
+# config.toml contiene il link privato del calendario: NON metterlo su GitHub.
+
+[luogo]
+nome = "Roma"
+lat = 41.89
+lon = 12.49
+fuso = "Europe/Rome"
+
+[calendario]
+# Google Calendar > Impostazioni > (il tuo calendario) > Integra calendario >
+# "Indirizzo segreto in formato iCal". Puoi mettere più calendari.
+ics_urls = [
+    "https://calendar.google.com/calendar/ical/TUO_INDIRIZZO/private-XXXXXXXX/basic.ics",
+]
+giorni = 7          # quanti giorni mostrare
+aggiorna_min = 10
+
+[meteo]
+aggiorna_min = 15
+
+[schermo]
+rotazione = 0            # 0 | 90 | 180 | 270 (modificabile anche dal pannello)
+tema = "notte"           # notte ardesia oceano foresta tramonto lavanda oled chiaro sabbia
+notte_stile = "rosso"    # rosso | ambra | grigio | giorno
+notte_inizio = "22:30"
+notte_fine = "06:30"
+luminosita_giorno = 70   # %
+luminosita_notte = 3     # %
+risveglio_tocco_sec = 20
+
+[sveglia]
+porta = 47654            # solo locale (127.0.0.1)
+durata_max_min = 15      # poi si spegne da sola
+snooze_min = 9
+suono = ""               # percorso di un .wav; vuoto = suono generato
+volume_iniziale = 0.15
+volume_finale = 0.8
+rampa_sec = 60           # volume crescente in 60 secondi
+
+[homeassistant]
+# Più comodo impostarlo dal pannello: Impostazioni → Da PC
+url = ""                 # es. "http://192.168.1.10:8123"
+token = ""               # token di accesso a lunga durata
+entita = []              # es. ["sensor.temperatura_camera", "light.lampada_comodino"]
+anticipo_min = 15        # evento "pre" N minuti prima della sveglia (0 = off)
+
+[batteria]
+gestione = true          # false = solo lettura
+min = 40                 # sotto: ricarica
+max = 80                 # sopra: smetti di caricare
+allarme_min = 20         # avviso a schermo se non si sta caricando
+presa = ""               # es. "switch.presa_comodino" (sceglibile dal pannello)
+invia_ha = true          # pubblica sensor.comodino_batteria su Home Assistant
+
+[web]
+porta = 8080             # configurazione da browser (attivabile dal pannello)
+durata_min = 15

@@ -1,0 +1,4 @@
+# Login automatico su tty1 -> interfaccia kiosk. Sulle altre console: shell normale.
+if [ "$(tty)" = "/dev/tty1" ]; then
+    exec /opt/comodino/system/start-kiosk.sh
+fi

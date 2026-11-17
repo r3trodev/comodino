@@ -1,0 +1,54 @@
+#!/bin/sh
+# Eseguito dentro la chroot durante la build: crea l'utente kiosk e configura il sistema.
+set -e
+
+# Utente senza password: entra solo con il login automatico su tty1 (o via chiave SSH)
+if ! id comodino >/dev/null 2>&1; then
+    useradd -m -s /bin/bash -c "Comodino" comodino
+fi
+for g in audio video input render; do
+    getent group "$g" >/dev/null && usermod -aG "$g" comodino
+done
+passwd -l comodino
+
+install -m 644 -o comodino -g comodino /opt/comodino/system/bash_profile /home/comodino/.bash_profile
+chmod 755 /opt/comodino/system/*.sh
+
+# Config leggibile dall'utente comodino (contiene il link privato del calendario)
+chown root:comodino /etc/comodino/config.toml
+chmod 640 /etc/comodino/config.toml
+
+# Servizio sveglia come servizio utente, attivo dal boot grazie al "linger"
+mkdir -p /var/lib/systemd/linger
+touch /var/lib/systemd/linger/comodino
+systemctl --global enable comodino-alarmd.service
+
+# Lingua e fuso orario (anche per il sistema installato, non solo per la live)
+sed -i 's/^# *it_IT.UTF-8 UTF-8/it_IT.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo 'LANG=it_IT.UTF-8' > /etc/default/locale
+ln -sf /usr/share/zoneinfo/Europe/Rome /etc/localtime
+echo 'Europe/Rome' > /etc/timezone
+systemctl enable systemd-timesyncd.service || true
+
+# SSH solo con chiave; se non è stata fornita una chiave, SSH resta spento
+if [ -f /etc/comodino/authorized_keys ]; then
+    install -d -m 700 -o comodino -g comodino /home/comodino/.ssh
+    install -m 600 -o comodino -g comodino /etc/comodino/authorized_keys /home/comodino/.ssh/authorized_keys
+    rm -f /etc/comodino/authorized_keys
+    systemctl enable ssh.service
+else
+    systemctl disable ssh.service || true
+fi
+[ -f /etc/NetworkManager/system-connections/casa.nmconnection ] && \
+    chmod 600 /etc/NetworkManager/system-connections/casa.nmconnection
+
+# Cherry Trail: il driver PWM della retroilluminazione deve essere già caricato
+# quando parte la grafica (i915), altrimenti la luminosità non è regolabile.
+for m in pwm_lpss pwm_lpss_platform pwm_crc; do
+    grep -qx "$m" /etc/initramfs-tools/modules 2>/dev/null || echo "$m" >> /etc/initramfs-tools/modules
+done
+update-initramfs -u -k all || true
+
+# Precompila il bytecode Python (avvio più rapido sull'Atom)
+python3 -m compileall -q /opt/comodino

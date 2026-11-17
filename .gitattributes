@@ -1,0 +1,7 @@
+# Sempre "a capo" Linux (LF): gli script girano sul tablet, non su Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.wav binary
+*.gz binary
+*.sig binary

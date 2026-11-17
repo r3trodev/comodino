@@ -1,0 +1,13 @@
+[Unit]
+Description=Comodino - demone sveglia
+ConditionUser=comodino
+Wants=pipewire.service wireplumber.service
+After=pipewire.service wireplumber.service
+
+[Service]
+ExecStart=/bin/sh /opt/comodino/system/avvia-alarmd.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

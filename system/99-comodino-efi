@@ -1,0 +1,4 @@
+// Il firmware Chuwi avvia "Android-IA" = \EFI\BOOT\BOOTX64.EFI (percorso di riserva).
+// Lì shim troverebbe fbx64.efi, ricreerebbe le voci di avvio e riavvierebbe: bootloop.
+// Dopo ogni aggiornamento si toglie fbx64.efi e si copia grub.cfg accanto a GRUB.
+DPkg::Post-Invoke { "rm -f /boot/efi/EFI/BOOT/fbx64.efi; if [ -f /boot/efi/EFI/debian/grub.cfg ]; then cp /boot/efi/EFI/debian/grub.cfg /boot/efi/EFI/BOOT/grub.cfg; fi"; };
