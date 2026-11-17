@@ -149,10 +149,8 @@ Se una VM accesa si ferma, compare un avviso rosso sulla schermata principale.
 ## Aggiornamenti via GitHub (senza ricompilare la ISO)
 
 Si aggiorna l'**applicazione** (cartella `comodino/`); pacchetti Debian e file di sistema
-restano quelli della ISO. Ogni pacchetto è **firmato Ed25519**: il tablet accetta solo
-release firmate con la tua chiave privata, solo versioni più nuove, estrae in modo
-sicuro, prova il codice prima di attivarlo e, se la nuova versione va in crash 3 volte
-appena avviata, torna da solo alla precedente. Il demone sveglia parte con il codice
+restano quelli della ISO. Ogni pacchetto è **firmato Ed25519**:  prova il codice prima di attivarlo e, 
+se la nuova versione va in crash 3 volteappena avviata, torna da solo alla precedente. Il demone sveglia parte con il codice
 nuovo solo se si importa senza errori, altrimenti usa quello della ISO.
 
 ### Una volta sola
