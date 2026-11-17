@@ -953,3 +953,32 @@ class TestWebNuoviCampi(unittest.TestCase):
         for bad in ({"px_url": "http://10.0.0.5:8006"}, {"px_token_id": "root"}, {"ha_sveglia_ora": "sveglia"}):
             with self.assertRaises(ValueError):
                 webconfig.valida(bad, cfg)
+
+
+# ---------------------------------------------------------------- v0.9.3: spia del server
+class TestSpiaServer(unittest.TestCase):
+    def dati(self, **mod):
+        r = proxmox.riassunto([
+            {"type": "node", "node": "pve", "status": "online", "cpu": 0.2, "mem": 4, "maxmem": 16},
+            {"type": "qemu", "vmid": 100, "name": "haos", "status": "running"},
+            {"type": "lxc", "vmid": 101, "name": "pihole", "status": "running"},
+            {"type": "qemu", "vmid": 102, "name": "test", "status": "stopped"},
+            {"type": "qemu", "vmid": 9000, "name": "debian-tpl", "status": "stopped", "template": 1},
+        ])
+        r.update(configurato=True, ok=True, **mod)
+        return r
+
+    def test_livelli(self):
+        sp = proxmox.spia
+        self.assertIsNone(sp({"configurato": False}))
+        self.assertEqual(sp(self.dati())["testo"], "1 macchina ferma: test")
+        ok = sp(self.dati(), ignora=[102])                       # spenta apposta
+        self.assertEqual(ok, {"livello": "ok", "testo": "Server ok · 2/2 attive"})   # template esclusi
+        d = self.dati()
+        d["nodi"][0]["cpu"] = 95
+        self.assertEqual(sp(d, [102])["livello"], "attenzione")
+        d["nodi"][0]["attivo"] = False
+        self.assertEqual(sp(d, [102]), {"livello": "errore", "testo": "Nodo offline: pve"})
+        self.assertEqual(sp({"configurato": True, "ok": False, "errore": "x"})["testo"], "Server non raggiungibile")
+        self.assertEqual(sp({"configurato": True, "ok": False, "impronta_nuova": "AA"})["livello"], "attenzione")
+        self.assertEqual(self.dati()["nodi"][0]["ram_pct"], 25)

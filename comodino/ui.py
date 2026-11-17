@@ -329,6 +329,8 @@ class Backend(QObject):
             self._vm_prima = dati["vm"]
         else:
             dati.setdefault("avvisi", self._server.get("avvisi", []))
+        dati["spia"] = proxmox.spia(dati, self.cfg["proxmox"]["ignora"])
+        dati["ignora"] = list(self.cfg["proxmox"]["ignora"])
         self._server = dati
         self.serverChanged.emit()
 
@@ -551,6 +553,14 @@ class Backend(QObject):
     @Slot(str)
     def impostaZonaAllerte(self, zona):
         self._salva({"allerte": {"zona": zona.strip()[:120]}})
+
+    @Slot(int, bool)
+    def ignoraVm(self, vmid, ignora):
+        lista = set(self.cfg["proxmox"]["ignora"])
+        (lista.add if ignora else lista.discard)(int(vmid))
+        self._salva({"proxmox": {"ignora": sorted(lista)}})
+        if self._server.get("ok"):                       # aggiorna subito la spia
+            self._set_server(dict(self._server))
 
     @Slot()
     def fidatiCertificato(self):
@@ -861,9 +871,8 @@ class Backend(QObject):
         else:
             voce("Allerte meteo", None, "zona non scelta (Luogo → Zona allerte)")
         sv = self._server
-        if sv.get("configurato"):
-            voce("Server Proxmox", sv.get("ok"), f"{sv.get('attive')}/{sv.get('totale')} VM accese" if sv.get("ok")
-                 else sv.get("errore", ""))
+        if sv.get("configurato") and sv.get("spia"):
+            voce("Server Proxmox", sv["spia"]["livello"] == "ok", sv["spia"]["testo"])
         bl = self.backlight.stato()
         if not bl["dispositivo"]:
             voce("Luminosità", False, bl["errore"])

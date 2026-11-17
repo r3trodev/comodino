@@ -106,11 +106,13 @@ def riassunto(risorse):
         if r.get("type") == "node":
             nodi.append({"nome": r.get("node", "?"), "attivo": r.get("status") == "online",
                          "cpu": _pct(r.get("cpu")), "ram": f"{_gb(r.get('mem'))}/{_gb(r.get('maxmem'))} GB",
+                         "ram_pct": round(100 * (r.get("mem") or 0) / r["maxmem"]) if r.get("maxmem") else 0,
                          "uptime": _durata(r.get("uptime"))})
         elif r.get("type") in ("qemu", "lxc"):
             vm.append({"id": r.get("vmid"), "nome": r.get("name") or str(r.get("vmid")),
                        "tipo": "VM" if r["type"] == "qemu" else "CT",
                        "attiva": r.get("status") == "running",
+                       "template": bool(r.get("template")),
                        "cpu": _pct(r.get("cpu")), "ram": f"{_gb(r.get('mem'))}/{_gb(r.get('maxmem'))} GB",
                        "uptime": _durata(r.get("uptime")) if r.get("status") == "running" else ""})
     vm.sort(key=lambda x: x["id"] or 0)
@@ -122,3 +124,30 @@ def nuove_fermate(prima, adesso):
     """Nomi delle VM che erano accese e ora sono ferme."""
     era = {v["id"]: v["attiva"] for v in prima}
     return [v["nome"] for v in adesso if not v["attiva"] and era.get(v["id"])]
+
+
+def spia(dati, ignora=()):
+    """Riassunto per la schermata principale: {'livello': ok|attenzione|errore, 'testo': ...}.
+
+    "Tutte attive" = tutte le VM e i container tranne i template e quelli da ignorare.
+    """
+    if not dati.get("configurato"):
+        return None
+    if not dati.get("ok"):
+        if dati.get("impronta_nuova"):
+            return {"livello": "attenzione", "testo": "Server: conferma il certificato"}
+        return {"livello": "errore", "testo": "Server non raggiungibile"}
+    giu = [n["nome"] for n in dati["nodi"] if not n["attivo"]]
+    if giu:
+        return {"livello": "errore", "testo": "Nodo offline: " + ", ".join(giu)}
+    ignora = {int(i) for i in ignora}
+    attese = [v for v in dati["vm"] if not v.get("template") and v["id"] not in ignora]
+    ferme = [v["nome"] for v in attese if not v["attiva"]]
+    if ferme:
+        elenco = ", ".join(ferme[:3]) + ("…" if len(ferme) > 3 else "")
+        return {"livello": "errore",
+                "testo": f"{len(ferme)} {'macchina ferma' if len(ferme) == 1 else 'macchine ferme'}: {elenco}"}
+    for n in dati["nodi"]:
+        if n["cpu"] >= 90 or n.get("ram_pct", 0) >= 90:
+            return {"livello": "attenzione", "testo": f"Server sotto sforzo: CPU {n['cpu']}% · RAM {n.get('ram_pct', 0)}%"}
+    return {"livello": "ok", "testo": f"Server ok · {len(attese)}/{len(attese)} attive"}

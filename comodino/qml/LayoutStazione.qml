@@ -11,6 +11,7 @@ Item {
     property string testoSveglia: ""
     property var avvisi: []
     signal apriSveglia()
+    signal apriServer()
 
     readonly property var m: backend.meteo
     readonly property var aria: m.aria || ({})
@@ -330,6 +331,27 @@ Item {
                     font.family: st.mono
                     font.pixelSize: 28 * st.u
                     elide: Text.ElideRight
+                }
+                Rectangle {   // spia del server
+                    readonly property var sp: backend.server.spia || null
+                    visible: !!sp
+                    implicitWidth: spTxt.implicitWidth + 36 * st.u
+                    implicitHeight: 62 * st.u
+                    radius: height / 2
+                    color: "transparent"
+                    border.width: 2
+                    border.color: !sp ? "transparent" : (sp.livello === "ok" ? st.tema.sfondo
+                                  : (sp.livello === "attenzione" ? "#d29922" : "#f85149"))
+                    Text {
+                        id: spTxt
+                        anchors.centerIn: parent
+                        text: !parent.sp ? "" : (parent.sp.livello === "ok" ? "✅ " + parent.sp.testo.replace("Server ok · ", "Server ")
+                                                                           : "⚠️ " + parent.sp.testo)
+                        color: !parent.sp || parent.sp.livello === "ok" ? st.tema.sfondo : (parent.sp.livello === "attenzione" ? "#d29922" : "#f85149")
+                        font.family: st.mono
+                        font.pixelSize: 24 * st.u
+                    }
+                    MouseArea { anchors.fill: parent; onClicked: st.apriServer() }
                 }
                 Repeater {    // entità di Home Assistant (max 3)
                     model: backend.haEntita.slice(0, 3)

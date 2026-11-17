@@ -28,6 +28,10 @@ Rectangle {
         backend.wifiStato()
         backend.diagnostica()
     }
+    function apriScheda(i) {
+        apri()
+        scheda = i
+    }
     function chiudi() {
         Qt.inputMethod.hide()
         visible = false
@@ -531,9 +535,9 @@ Rectangle {
                 Titolo { tema: pag.tema; u: pag.u; text: "Tema"; Layout.topMargin: 6 * pag.u }
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: 4
-                    columnSpacing: 16 * pag.u
-                    rowSpacing: 16 * pag.u
+                    columns: 6
+                    columnSpacing: 12 * pag.u
+                    rowSpacing: 12 * pag.u
                     Repeater {
                         model: Temi.ORDINE
                         delegate: Rectangle {
@@ -542,38 +546,39 @@ Rectangle {
                             readonly property var t: Temi.TEMI[modelData]
                             readonly property bool scelto: pag.imp.tema === modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 150 * pag.u
-                            radius: 18 * pag.u
+                            Layout.preferredHeight: 118 * pag.u
+                            Layout.preferredWidth: 1
+                            radius: 16 * pag.u
                             color: t.sfondo
                             border.width: scelto ? 5 : 1
                             border.color: scelto ? pag.tema.accento : pag.tema.tenue
                             Text {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
-                                anchors.margins: 18 * pag.u
-                                text: anteprima.t.nome + (anteprima.scelto ? "  ✓" : "")
+                                anchors.margins: 12 * pag.u
+                                text: anteprima.t.nome + (anteprima.scelto ? " ✓" : "")
                                 color: anteprima.t.testo
-                                font.pixelSize: 30 * pag.u
+                                font.pixelSize: 24 * pag.u
                                 font.weight: Font.DemiBold
                             }
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
-                                anchors.margins: 16 * pag.u
-                                height: 60 * pag.u
-                                radius: 12 * pag.u
+                                anchors.margins: 10 * pag.u
+                                height: 46 * pag.u
+                                radius: 10 * pag.u
                                 color: anteprima.t.carta
                                 Row {
                                     anchors.centerIn: parent
-                                    spacing: 14 * pag.u
+                                    spacing: 10 * pag.u
                                     Rectangle {
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: 26 * pag.u; height: width; radius: width / 2
+                                        width: 20 * pag.u; height: width; radius: width / 2
                                         color: anteprima.t.accento
                                     }
-                                    Text { text: "07:30"; color: anteprima.t.testo; font.pixelSize: 28 * pag.u }
-                                    Text { text: "Agenda"; color: anteprima.t.tenue; font.pixelSize: 24 * pag.u; anchors.verticalCenter: parent.verticalCenter }
+                                    Text { text: "07:30"; color: anteprima.t.testo; font.pixelSize: 22 * pag.u }
+                                    Text { text: "12°"; color: anteprima.t.tenue; font.pixelSize: 20 * pag.u; anchors.verticalCenter: parent.verticalCenter }
                                 }
                             }
                             MouseArea { anchors.fill: parent; onClicked: backend.impostaTema(anteprima.modelData) }
@@ -873,6 +878,11 @@ Rectangle {
                     color: "#f85149"
                     text: "VM che si sono fermate: " + (tabSrv.sv.avvisi || []).join(", ")
                 }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    visible: !!tabSrv.sv.ok
+                    text: "Tocca una macchina che tieni spenta apposta per ignorarla: così non fa scattare la spia rossa."
+                }
                 Repeater {   // nodi
                     model: tabSrv.sv.ok ? tabSrv.sv.nodi : []
                     delegate: Text {
@@ -891,6 +901,8 @@ Rectangle {
                     model: tabSrv.sv.ok ? tabSrv.sv.vm : []
                     delegate: Rectangle {
                         required property var modelData
+                        readonly property bool ignorata: (tabSrv.sv.ignora || []).indexOf(modelData.id) >= 0
+                        opacity: ignorata || modelData.template ? 0.5 : 1
                         width: listaVm.width
                         height: 74 * pag.u
                         radius: 12 * pag.u
@@ -902,7 +914,7 @@ Rectangle {
                             anchors.leftMargin: 20 * pag.u
                             anchors.rightMargin: 20 * pag.u
                             spacing: 18 * pag.u
-                            Text { text: parent.parent.modelData.attiva ? "🟢" : "⚪"; font.pixelSize: 28 * pag.u }
+                            Text { text: parent.parent.modelData.attiva ? "🟢" : (parent.parent.ignorata ? "⚪" : "🔴"); font.pixelSize: 28 * pag.u }
                             Text {
                                 text: parent.parent.modelData.id + "  " + parent.parent.modelData.nome
                                 color: pag.tema.testo
@@ -910,13 +922,22 @@ Rectangle {
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
-                            Text { text: parent.parent.modelData.tipo; color: pag.tema.tenue; font.pixelSize: 24 * pag.u }
+                            Text {
+                                text: parent.parent.modelData.template ? "template" : (parent.parent.ignorata ? "ignorata" : parent.parent.modelData.tipo)
+                                color: pag.tema.tenue
+                                font.pixelSize: 24 * pag.u
+                            }
                             Text {
                                 visible: parent.parent.modelData.attiva
                                 text: "CPU " + parent.parent.modelData.cpu + "%   " + parent.parent.modelData.ram + "   " + parent.parent.modelData.uptime
                                 color: pag.tema.tenue
                                 font.pixelSize: 24 * pag.u
                             }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !parent.modelData.template
+                            onClicked: backend.ignoraVm(parent.modelData.id, !parent.ignorata)
                         }
                     }
                 }

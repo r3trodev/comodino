@@ -74,6 +74,7 @@ DEFAULT = {
         "token_id": "",                 # es. "comodino@pve!comodino"
         "secret": "",                   # segreto del token (ruolo PVEAuditor: sola lettura)
         "fingerprint": "",              # SHA-256 del certificato (fissato al primo collegamento)
+        "ignora": [],                   # ID di VM/container spenti apposta (non danno allarme)
     },
     "web": {"porta": 8080, "durata_min": 15},
 }

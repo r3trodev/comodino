@@ -51,6 +51,9 @@ ApplicationWindow {
         var nomi = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
         return g.slice().sort().map(function (i) { return nomi[i] }).join(" ")
     }
+    function coloreSpia(l) { return l === "ok" ? "#3fb950" : (l === "attenzione" ? "#d29922" : "#f85149") }
+    function testoSpia(sp) { return (sp.livello === "ok" ? "✅  " : "⚠️  ") + sp.testo }
+
     function testoSveglia() {
         var s = backend.sveglia
         if (!s.connessa) return "⚠️  Servizio sveglia non attivo"
@@ -65,15 +68,12 @@ ApplicationWindow {
         return icona + "  " + quando + Qt.formatTime(p, "HH:mm") + (s.prossima_nome ? "   ·   " + s.prossima_nome : "")
     }
 
-    // Avvisi importanti: allerte meteo e VM ferme (visibili anche di notte)
+    // Avvisi importanti: allerte meteo (visibili anche di notte)
     readonly property var avvisi: {
         var out = []
         var a = backend.allerte
         for (var i = 0; i < a.length; i++)
             out.push({ testo: "⚠️ " + a[i].testo + (a[i].alle ? " (fino a " + a[i].alle + ")" : ""), colore: a[i].colore })
-        var v = backend.server.avvisi || []
-        for (var j = 0; j < v.length; j++)
-            out.push({ testo: "🖧 VM ferma: " + v[j], colore: "#f85149" })
         return out
     }
 
@@ -112,6 +112,7 @@ ApplicationWindow {
             testoSveglia: win.testoSveglia()
             avvisi: win.avvisi
             onApriSveglia: dialogSveglia.apri()
+            onApriServer: impostazioni.apriScheda(7)
         }
 
         RowLayout {
@@ -159,7 +160,27 @@ ApplicationWindow {
                     }
                     MouseArea { anchors.fill: parent; onClicked: dialogSveglia.apri() }
                 }
-                Column {   // avvisi: allerte meteo e VM ferme
+                Rectangle {   // spia del server: tocca per i dettagli
+                readonly property var sp: backend.server.spia || null
+                visible: !!sp && (!win.notte || sp.livello !== "ok")
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 22 * win.u
+                implicitWidth: spiaTxt.implicitWidth + 48 * win.u
+                implicitHeight: 70 * win.u
+                radius: height / 2
+                color: temaApp.carta
+                border.width: 2
+                border.color: sp ? win.coloreSpia(sp.livello) : "transparent"
+                Text {
+                    id: spiaTxt
+                    anchors.centerIn: parent
+                    text: parent.sp ? win.testoSpia(parent.sp) : ""
+                    color: temaApp.testo
+                    font.pixelSize: 28 * win.u
+                }
+                MouseArea { anchors.fill: parent; onClicked: impostazioni.apriScheda(7) }
+            }
+            Column {   // avvisi: allerte meteo
                 Layout.alignment: Qt.AlignHCenter
                 Layout.topMargin: 22 * win.u
                 spacing: 10 * win.u
