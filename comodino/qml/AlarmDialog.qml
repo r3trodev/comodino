@@ -81,8 +81,8 @@ Item {
 
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(1300 * dlg.u, parent.width - 40 * dlg.u)
-        height: Math.min(1020 * dlg.u, parent.height - 40 * dlg.u)
+        width: Math.min(1500 * dlg.u, parent.width - 60 * dlg.u)
+        height: Math.min(1060 * dlg.u, parent.height - 60 * dlg.u)
         color: dlg.tema.carta
         radius: 28 * dlg.u
         border.color: dlg.tema.accento
@@ -100,7 +100,7 @@ Item {
                 Layout.fillWidth: true
                 Text { text: "⏰  Sveglie"; color: dlg.tema.testo; font.pixelSize: 48 * dlg.u; font.weight: Font.Bold }
                 Item { Layout.fillWidth: true }
-                BigButton { tema: dlg.tema; u: dlg.u; text: "＋  Nuova"; primary: true; onClicked: dlg.nuova() }
+                BigButton { tema: dlg.tema; u: dlg.u; text: "+  Nuova"; primary: true; onClicked: dlg.nuova() }
             }
 
             ListView {
@@ -170,39 +170,54 @@ Item {
                 font.pixelSize: 30 * dlg.u
             }
 
+            // pisolino
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 16 * dlg.u
-                Text { text: "😴 Pisolino"; color: dlg.tema.testo; font.pixelSize: 30 * dlg.u }
+                Text {
+                    text: "😴  Pisolino"
+                    color: dlg.tema.testo
+                    font.pixelSize: 30 * dlg.u
+                    Layout.preferredWidth: 230 * dlg.u
+                }
                 Repeater {
                     model: [10, 20, 30]
                     delegate: BigButton {
                         required property int modelData
                         tema: dlg.tema; u: dlg.u
-                        implicitHeight: 84 * dlg.u
+                        implicitHeight: 80 * dlg.u
                         text: modelData + " min"
                         onClicked: { backend.pisolino(modelData); dlg.close() }
                     }
                 }
                 Item { Layout.fillWidth: true }
-                Text { text: "🌅 Alba"; color: dlg.tema.testo; font.pixelSize: 30 * dlg.u }
+            }
+            // alba simulata + chiudi
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 16 * dlg.u
+                Text {
+                    text: "🌅  Alba"
+                    color: dlg.tema.testo
+                    font.pixelSize: 30 * dlg.u
+                    Layout.preferredWidth: 230 * dlg.u
+                }
                 Numero {
                     tema: dlg.tema; u: dlg.u
                     valore: backend.impostazioni.alba_min
-                    minimo: 0; massimo: 60; passo: 5; suffisso: "′"
+                    minimo: 0; massimo: 60; passo: 5; suffisso: " min"
                     onCambiato: (v) => backend.impostaAlba(v)
                 }
-            }
-            RowLayout {
-                Layout.fillWidth: true
                 Text {
                     Layout.fillWidth: true
+                    Layout.leftMargin: 10 * dlg.u
                     text: backend.impostazioni.alba_min > 0
-                          ? "Lo schermo si illumina piano " + backend.impostazioni.alba_min + " minuti prima di ogni sveglia."
-                          : "Alba simulata spenta."
+                          ? "prima di ogni sveglia lo schermo si illumina piano"
+                          : "alba simulata spenta"
                     color: dlg.tema.tenue
                     font.pixelSize: 24 * dlg.u
                     wrapMode: Text.WordWrap
+                    maximumLineCount: 2
                 }
                 BigButton { tema: dlg.tema; u: dlg.u; text: "Chiudi"; onClicked: dlg.close() }
             }

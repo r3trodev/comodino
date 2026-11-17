@@ -24,7 +24,7 @@ RowLayout {
         color: n.tema.testo
         font.pixelSize: 46 * n.u
         horizontalAlignment: Text.AlignHCenter
-        Layout.preferredWidth: 150 * n.u
+        Layout.preferredWidth: Math.max(150 * n.u, implicitWidth + 10 * n.u)
     }
     BigButton {
         tema: n.tema; u: n.u; text: "+"; implicitWidth: 100 * n.u
