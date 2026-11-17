@@ -24,7 +24,7 @@ from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot  # 
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 
-from . import config, geocode, icsparse, ota, sistema, weather  # noqa: E402
+from . import allerte, config, geocode, icsparse, luna, ota, proxmox, sistema, weather  # noqa: E402
 from .luminosita import Backlight  # noqa: E402
 from .homeassistant import HomeAssistant  # noqa: E402
 from .webconfig import WebConfig  # noqa: E402
@@ -54,6 +54,11 @@ class Backend(QObject):
     _webStato = Signal()
     _webSalvato = Signal()
     otaChanged = Signal()
+    allerteChanged = Signal()
+    serverChanged = Signal()
+    albaChanged = Signal()
+    _allertePronte = Signal(object)
+    _serverPronto = Signal(object)
 
     def __init__(self, cfg):
         super().__init__()
@@ -69,17 +74,24 @@ class Backend(QObject):
         self._errore = ""
         self._awake_until = 0.0
         self.backlight = Backlight(cfg["schermo"]["retroilluminazione"])
-        self._wake = {k: threading.Event() for k in ("meteo", "agenda", "ha")}
+        self._wake = {k: threading.Event() for k in ("meteo", "agenda", "ha", "allerte", "server")}
+        self._allerte = []
+        self._server = {"configurato": False}
+        self._vm_prima = []
+        self._alba = -1.0
+        self._alba_nascosta = None
 
         self._meteoPronto.connect(self._set_meteo)
         self._agendaPronta.connect(self._set_agenda)
         self._haPronto.connect(self._set_ha)
         self._climaPronto.connect(self._set_clima)
+        self._allertePronte.connect(self._set_allerte)
+        self._serverPronto.connect(self._set_server)
         self._webStato.connect(self.webChanged)
         self._webSalvato.connect(self._ricarica)     # dal thread del server web al thread principale
         self.web = WebConfig(on_saved=self._salvato_da_web, on_state=self._webStato.emit)
 
-        for target in (self._loop_meteo, self._loop_agenda, self._loop_ha):
+        for target in (self._loop_meteo, self._loop_agenda, self._loop_ha, self._loop_allerte, self._loop_server):
             threading.Thread(target=target, daemon=True).start()
 
         self._t_alarm = QTimer(self, interval=1000, timeout=self._poll_alarm)
@@ -90,6 +102,7 @@ class Backend(QObject):
         self._ota = {"stato": "", "errore": "", "disponibile": None, "occupato": False,
                      "ultimo_controllo": 0.0}
         self.risultato.connect(self._ota_esito)
+        self.risultato.connect(self._esito_certificato)
         self._t_ota = QTimer(self, interval=15 * 60 * 1000, timeout=self._ota_notturno)
         self._t_ota.start()
         self._update_screen()
@@ -135,6 +148,9 @@ class Backend(QObject):
             "lat": c["luogo"]["lat"], "lon": c["luogo"]["lon"],
             "rotazione": c["schermo"]["rotazione"],
             "tema": c["schermo"]["tema"],
+            "alba_min": c["schermo"]["alba_min"],
+            "zona_allerte": c["allerte"]["zona"],
+            "telefono": bool(c["homeassistant"]["sveglia_ora"]),
             "layout": c["schermo"]["layout"],
             "notte_stile": c["schermo"]["notte_stile"],
             "notte_inizio": c["schermo"]["notte_inizio"],
@@ -168,6 +184,18 @@ class Backend(QObject):
     @Property(str, notify=configChanged)
     def citta(self):
         return self.cfg["luogo"]["nome"]
+
+    @Property("QVariantList", notify=allerteChanged)
+    def allerte(self):
+        return self._allerte
+
+    @Property("QVariantMap", notify=serverChanged)
+    def server(self):
+        return self._server
+
+    @Property(float, notify=albaChanged)
+    def alba(self):
+        return self._alba
 
     @Property("QVariantMap", notify=otaChanged)
     def otaStato(self):
@@ -214,6 +242,7 @@ class Backend(QObject):
                 except Exception as e:          # la qualità dell'aria è un extra
                     print("aria:", e, file=sys.stderr)
                     dati["aria"] = {}
+                dati["luna"] = luna.fase()
                 self._meteoPronto.emit(dati)
                 delay = self.cfg["meteo"]["aggiorna_min"] * 60
             except Exception as e:
@@ -255,6 +284,53 @@ class Backend(QObject):
         if err != self._errore:
             self._errore = err
             self.erroreChanged.emit()
+
+    def _loop_allerte(self):
+        while True:
+            zona = self.cfg["allerte"]["zona"]
+            try:
+                self._allertePronte.emit(allerte.parse(allerte.fetch(), zona) if zona else [])
+                attesa = 15 * 60
+            except Exception as e:
+                print("allerte:", e, file=sys.stderr)
+                attesa = 5 * 60
+            self._sleep("allerte", attesa)
+
+    def _loop_server(self):
+        while True:
+            p = self.cfg["proxmox"]
+            px = proxmox.Proxmox(p["url"], p["token_id"], p["secret"], p["fingerprint"])
+            if not px.configurato:
+                self._serverPronto.emit({"configurato": False})
+            else:
+                try:
+                    self._serverPronto.emit(dict(px.stato(), configurato=True, ok=True))
+                except proxmox.CertificatoDaConfermare as e:
+                    self._serverPronto.emit({"configurato": True, "ok": False, "impronta_nuova": e.impronta,
+                                             "errore": "Conferma il certificato del server (scheda Server)"})
+                except Exception as e:
+                    self._serverPronto.emit({"configurato": True, "ok": False, "errore": str(e)[:160]})
+            self._sleep("server", 60)
+
+    @Slot(object)
+    def _set_allerte(self, dati):
+        if dati != self._allerte:
+            self._allerte = dati
+            self.allerteChanged.emit()
+
+    @Slot(object)
+    def _set_server(self, dati):
+        if dati.get("ok"):
+            fermate = proxmox.nuove_fermate(self._vm_prima, dati["vm"]) if self._vm_prima else []
+            # gli avvisi restano finché la VM non torna accesa
+            vecchi = [n for n in self._server.get("avvisi", [])
+                      if any(v["nome"] == n and not v["attiva"] for v in dati["vm"])]
+            dati["avvisi"] = sorted(set(vecchi + fermate))
+            self._vm_prima = dati["vm"]
+        else:
+            dati.setdefault("avvisi", self._server.get("avvisi", []))
+        self._server = dati
+        self.serverChanged.emit()
 
     def _leggi_clima(self, ha):
         """{'interno': {temp, umidita}, 'esterno': {...}} dai sensori di HA (se configurati)."""
@@ -327,6 +403,22 @@ class Backend(QObject):
         self._call({"cmd": "imposta", "attiva": attiva, "ora": ora,
                     "minuto": minuto, "giorni": [int(g) for g in giorni]})
 
+    @Slot("QVariantMap")
+    def salvaSveglia(self, sv):
+        self._call({"cmd": "salva_sveglia", "sveglia": dict(sv)})
+
+    @Slot(str)
+    def eliminaSveglia(self, sid):
+        self._call({"cmd": "elimina_sveglia", "id": sid})
+
+    @Slot(str, bool)
+    def attivaSveglia(self, sid, attiva):
+        self._call({"cmd": "attiva_sveglia", "id": sid, "attiva": attiva})
+
+    @Slot(int)
+    def pisolino(self, minuti):
+        self._call({"cmd": "pisolino", "minuti": minuti})
+
     @Slot()
     def snooze(self):
         self._call({"cmd": "snooze"})
@@ -353,9 +445,42 @@ class Backend(QObject):
         if night != self._notte:
             self._notte = night
             self.notteChanged.emit()
+        alba = self._calcola_alba()
+        if alba != self._alba:
+            self._alba = alba
+            self.albaChanged.emit()
         bright = (self._sveglia.get("suona") or not night
                   or time.monotonic() < self._awake_until)
-        self.backlight.set(s["luminosita_giorno"] if bright else s["luminosita_notte"], force)
+        if bright:
+            livello = s["luminosita_giorno"]
+        elif alba >= 0:          # alba simulata: la luce sale piano fino al livello di giorno
+            livello = round(s["luminosita_notte"] + (s["luminosita_giorno"] - s["luminosita_notte"]) * alba)
+        else:
+            livello = s["luminosita_notte"]
+        self.backlight.set(livello, force)
+
+    def _calcola_alba(self):
+        """0..1 nei minuti prima della prossima sveglia (non pisolini), -1 altrimenti."""
+        durata = self.cfg["schermo"]["alba_min"]
+        sv = self._sveglia
+        if durata <= 0 or sv.get("suona") or not sv.get("prossima") or sv.get("prossima_nome") == "Pisolino":
+            return -1.0
+        try:
+            quando = datetime.fromisoformat(sv["prossima"])
+        except ValueError:
+            return -1.0
+        if self._alba_nascosta == sv["prossima"]:
+            return -1.0
+        mancano = (quando - datetime.now()).total_seconds() / 60
+        if 0 < mancano <= durata:
+            return round(1 - mancano / durata, 3)
+        return -1.0
+
+    @Slot()
+    def albaNascondi(self):
+        """Un tocco durante l'alba la nasconde fino alla sveglia."""
+        self._alba_nascosta = self._sveglia.get("prossima")
+        self._update_screen()
 
     @Slot()
     def tocco(self):
@@ -371,7 +496,9 @@ class Backend(QObject):
     # quali aggiornamenti in background dipendono da quali sezioni della configurazione
     _DIPENDENZE = {"meteo": ("luogo", "meteo"),
                    "agenda": ("calendario", "luogo"),
-                   "ha": ("homeassistant", "clima")}
+                   "ha": ("homeassistant", "clima"),
+                   "allerte": ("allerte",),
+                   "server": ("proxmox",)}
 
     @Slot()
     def _ricarica(self):
@@ -412,6 +539,37 @@ class Backend(QObject):
             cur = self.backlight.dev.name if self.backlight.dev else ""
             nxt = alt[(alt.index(cur) + 1) % len(alt)] if cur in alt else alt[0]
             self._salva({"schermo": {"retroilluminazione": nxt}})
+
+    @Slot(int)
+    def impostaAlba(self, minuti):
+        self._salva({"schermo": {"alba_min": max(0, min(60, minuti))}})
+
+    @Slot()
+    def cercaZoneAllerte(self):
+        self._async("zone_allerte", lambda: {"ok": True, "zone": allerte.zone(allerte.fetch())})
+
+    @Slot(str)
+    def impostaZonaAllerte(self, zona):
+        self._salva({"allerte": {"zona": zona.strip()[:120]}})
+
+    @Slot()
+    def fidatiCertificato(self):
+        """Fissa l'impronta del certificato che il server presenta ADESSO."""
+        p = self.cfg["proxmox"]
+
+        def go():
+            imp = proxmox.Proxmox(p["url"], p["token_id"], p["secret"]).impronta_attuale()
+            if imp != self._server.get("impronta_nuova"):
+                return {"ok": False, "errore": "il certificato è cambiato di nuovo: riprova"}
+            return {"ok": True, "impronta": imp}
+
+        self._async("certificato", go)
+
+    @Slot(str, "QVariant")
+    def _esito_certificato(self, nome, dati):
+        if nome == "certificato" and dati and dati.get("ok"):
+            self._salva({"proxmox": {"fingerprint": dati["impronta"]}})
+            self._wake["server"].set()
 
     @Slot(str)
     def impostaLayout(self, nome):
@@ -697,6 +855,15 @@ class Backend(QObject):
                  + (f" · {b['errore']}" if b.get("errore") else ""))
         else:
             voce("Batteria", None, "non rilevata")
+        if c["allerte"]["zona"]:
+            voce("Allerte meteo", True, f"zona {c['allerte']['zona']}: " +
+                 (", ".join(a["testo"] for a in self._allerte) or "nessuna allerta"))
+        else:
+            voce("Allerte meteo", None, "zona non scelta (Luogo → Zona allerte)")
+        sv = self._server
+        if sv.get("configurato"):
+            voce("Server Proxmox", sv.get("ok"), f"{sv.get('attive')}/{sv.get('totale')} VM accese" if sv.get("ok")
+                 else sv.get("errore", ""))
         bl = self.backlight.stato()
         if not bl["dispositivo"]:
             voce("Luminosità", False, bl["errore"])

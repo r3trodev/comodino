@@ -36,8 +36,9 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             text: {
                 var m = backend.meteo
-                return m.temp !== undefined ? "Buongiorno!  " + m.icona + "  " + m.temp + "°  " + m.descrizione
-                                            : "Buongiorno!"
+                var nome = backend.sveglia.suona_nome ? backend.sveglia.suona_nome + "  ·  " : ""
+                return nome + (m.temp !== undefined ? "Buongiorno!  " + m.icona + "  " + m.temp + "°  " + m.descrizione
+                                                    : "Buongiorno!")
             }
             color: "#e6edf3"
             font.pixelSize: 54 * ov.u

@@ -14,6 +14,7 @@ Rectangle {
     property bool ssidProtetta: false
     property bool conferma: false        // doppio tocco per riavvio/spegnimento
     property bool sceltaPresa: false     // elenco prese di Home Assistant aperto
+    property bool sceltaZona: false      // elenco zone delle allerte meteo aperto
     readonly property var imp: backend.impostazioni
 
     color: tema.sfondo
@@ -32,6 +33,7 @@ Rectangle {
         visible = false
         conferma = false
         sceltaPresa = false
+        sceltaZona = false
     }
     function azzera(nome) {
         var e = Object.assign({}, esiti)
@@ -46,6 +48,7 @@ Rectangle {
             e[nome] = dati
             pag.esiti = e
             if (nome === "prese" && dati.ok) pag.sceltaPresa = true
+            if (nome === "zone_allerte" && dati.ok) pag.sceltaZona = true
             if (nome === "wifi_connetti" && dati.ok) {
                 pag.ssidScelto = ""
                 backend.wifiStato()
@@ -68,14 +71,14 @@ Rectangle {
 
             Titolo { tema: pag.tema; u: pag.u; text: "⚙️  Impostazioni"; Layout.bottomMargin: 6 * pag.u }
             Repeater {
-                model: ["🩺  Stato", "📶  Wi-Fi", "📍  Luogo", "🖥️  Schermo", "🎨  Tema", "🔋  Batteria", "🏠  Casa", "💻  Da PC", "⬆️  Aggiorna"]
+                model: ["🩺  Stato", "📶  Wi-Fi", "📍  Luogo", "🖥️  Schermo", "🎨  Tema", "🔋  Batteria", "🏠  Casa", "🖧  Server", "💻  Da PC", "⬆️  Aggiorna"]
                 delegate: BigButton {
                     required property int index
                     required property string modelData
                     tema: pag.tema; u: pag.u
                     Layout.fillWidth: true
-                    implicitHeight: 80 * pag.u
-                    fontSize: 31 * pag.u
+                    implicitHeight: 76 * pag.u
+                    fontSize: 29 * pag.u
                     text: modelData
                     primary: pag.scheda === index
                     onClicked: { Qt.inputMethod.hide(); pag.scheda = index }
@@ -85,7 +88,7 @@ Rectangle {
             BigButton {
                 tema: pag.tema; u: pag.u
                 Layout.fillWidth: true
-                implicitHeight: 80 * pag.u
+                implicitHeight: 76 * pag.u
                 text: "✕  Chiudi"
                 onClicked: pag.chiudi()
             }
@@ -317,8 +320,72 @@ Rectangle {
                     visible: !!pag.esiti.luogo && pag.esiti.luogo.ok !== true
                     text: !pag.esiti.luogo ? "" : (pag.esiti.luogo.ok === null ? "Ricerca…" : pag.esiti.luogo.errore)
                 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 18 * pag.u
+                    Nota {
+                        tema: pag.tema; u: pag.u
+                        text: "⚠️ Zona allerte meteo: " + (pag.imp.zona_allerte || "non scelta")
+                    }
+                    BigButton {
+                        tema: pag.tema; u: pag.u
+                        text: "Scegli zona…"
+                        onClicked: {
+                            pag.esiti = Object.assign({}, pag.esiti, { zone_allerte: { ok: null } })
+                            filtroZona.text = ""
+                            backend.cercaZoneAllerte()
+                        }
+                    }
+                }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    visible: !!pag.esiti.zone_allerte && pag.esiti.zone_allerte.ok !== true
+                    color: pag.esiti.zone_allerte && pag.esiti.zone_allerte.ok === false ? "#f85149" : pag.tema.tenue
+                    text: !pag.esiti.zone_allerte ? "" : (pag.esiti.zone_allerte.ok === null ? "Scarico l'elenco delle zone da Meteoalarm…" : pag.esiti.zone_allerte.errore)
+                }
+                Campo {
+                    id: filtroZona
+                    visible: pag.sceltaZona
+                    tema: pag.tema; u: pag.u
+                    Layout.fillWidth: true
+                    placeholderText: "Filtra (es. Palermo, Sicilia)…"
+                }
+                ListView {
+                    id: zone
+                    visible: pag.sceltaZona
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6 * pag.u
+                    model: {
+                        var z = pag.esiti.zone_allerte && pag.esiti.zone_allerte.ok ? pag.esiti.zone_allerte.zone : []
+                        var f = filtroZona.text.toLowerCase()
+                        return f ? z.filter(function (x) { return x.toLowerCase().indexOf(f) >= 0 }) : z
+                    }
+                    delegate: Rectangle {
+                        required property string modelData
+                        width: zone.width
+                        height: 78 * pag.u
+                        radius: 12 * pag.u
+                        color: pag.imp.zona_allerte === modelData ? pag.tema.carta : "transparent"
+                        border.color: pag.tema.tenue
+                        border.width: 1
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: 24 * pag.u
+                            text: parent.modelData
+                            color: pag.tema.testo
+                            font.pixelSize: 30 * pag.u
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: { backend.impostaZonaAllerte(parent.modelData); pag.sceltaZona = false; Qt.inputMethod.hide() }
+                        }
+                    }
+                }
                 ListView {
                     id: luoghi
+                    visible: !pag.sceltaZona
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -565,7 +632,9 @@ Rectangle {
                         Nota {
                             tema: pag.tema; u: pag.u
                             visible: !!tabBatt.b.presente
-                            text: (tabBatt.b.temperatura !== null && tabBatt.b.temperatura !== undefined ? "Temperatura " + tabBatt.b.temperatura + " °C" : "Temperatura non disponibile")
+                            text: (tabBatt.b.temperatura !== null && tabBatt.b.temperatura !== undefined ? "Batteria " + tabBatt.b.temperatura + " °C" : "Temp. batteria non disponibile")
+                                  + (tabBatt.b.temp_processore !== null && tabBatt.b.temp_processore !== undefined
+                                     ? "  ·  Processore " + tabBatt.b.temp_processore + " °C" + (tabBatt.b.caldo ? " 🔥" : "") : "")
                                   + (tabBatt.b.salute ? "  ·  Salute: " + tabBatt.b.salute : "")
                         }
                         Nota {
@@ -702,6 +771,12 @@ Rectangle {
                     text: "Evento prima della sveglia: " + (pag.imp.ha_anticipo > 0 ? pag.imp.ha_anticipo + " minuti prima" : "disattivato")
                           + ".  La sveglia invia a Home Assistant l'evento «comodino_sveglia» con azione pre / suona / rimanda / spenta: usalo nelle automazioni (es. luci che si accendono piano)."
                 }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    text: pag.imp.telefono
+                          ? "📱 Sveglia dal telefono attiva: cambiala da Home Assistant (anche fuori casa). Il Comodino pubblica anche sensor.comodino_prossima_sveglia."
+                          : "📱 Sveglia dal telefono: crea in Home Assistant un helper «Data e/o ora» (e un interruttore) e inseriscili da «Da PC»."
+                }
                 Titolo { tema: pag.tema; u: pag.u; text: "Entità"; Layout.topMargin: 16 * pag.u; visible: backend.haEntita.length > 0 }
                 ListView {
                     id: ents
@@ -748,6 +823,102 @@ Rectangle {
                     tema: pag.tema; u: pag.u
                     visible: backend.haEntita.length === 0 && !!pag.imp.ha_url
                     text: "Nessuna entità da mostrare: aggiungile dalla scheda «Da PC»."
+                }
+            }
+
+            // ============================================ SERVER (Proxmox)
+            ColumnLayout {
+                id: tabSrv
+                spacing: 14 * pag.u
+                readonly property var sv: backend.server
+                Titolo { tema: pag.tema; u: pag.u; text: "Server Proxmox" }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    visible: !tabSrv.sv.configurato
+                    text: "Non configurato. Crea in Proxmox un token in sola lettura (ruolo PVEAuditor) e inserisci indirizzo, token ID e segreto da «Da PC»."
+                }
+                // primo collegamento: conferma del certificato
+                ColumnLayout {
+                    visible: !!tabSrv.sv.impronta_nuova
+                    spacing: 10 * pag.u
+                    Nota {
+                        tema: pag.tema; u: pag.u
+                        color: pag.tema.testo
+                        text: "Il server presenta questo certificato. Confrontalo con quello in Proxmox (nodo → Sistema → Certificati → Impronta SHA-256) e conferma solo se coincide:"
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: tabSrv.sv.impronta_nuova || ""
+                        wrapMode: Text.WrapAnywhere
+                        color: pag.tema.accento
+                        font.family: "DejaVu Sans Mono"
+                        font.pixelSize: 24 * pag.u
+                    }
+                    BigButton {
+                        tema: pag.tema; u: pag.u
+                        primary: true
+                        text: "🔒  Coincide: fidati di questo certificato"
+                        onClicked: { pag.azzera("certificato"); backend.fidatiCertificato() }
+                    }
+                }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    visible: tabSrv.sv.configurato && !tabSrv.sv.ok && !tabSrv.sv.impronta_nuova
+                    color: "#f85149"
+                    text: "⚠️ " + (tabSrv.sv.errore || "")
+                }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    visible: (tabSrv.sv.avvisi || []).length > 0
+                    color: "#f85149"
+                    text: "VM che si sono fermate: " + (tabSrv.sv.avvisi || []).join(", ")
+                }
+                Repeater {   // nodi
+                    model: tabSrv.sv.ok ? tabSrv.sv.nodi : []
+                    delegate: Text {
+                        required property var modelData
+                        text: (modelData.attivo ? "🟢 " : "🔴 ") + modelData.nome + "   CPU " + modelData.cpu + "%   RAM " + modelData.ram + "   acceso da " + modelData.uptime
+                        color: pag.tema.testo
+                        font.pixelSize: 30 * pag.u
+                    }
+                }
+                ListView {
+                    id: listaVm
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6 * pag.u
+                    model: tabSrv.sv.ok ? tabSrv.sv.vm : []
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: listaVm.width
+                        height: 74 * pag.u
+                        radius: 12 * pag.u
+                        color: "transparent"
+                        border.color: pag.tema.tenue
+                        border.width: 1
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 20 * pag.u
+                            anchors.rightMargin: 20 * pag.u
+                            spacing: 18 * pag.u
+                            Text { text: parent.parent.modelData.attiva ? "🟢" : "⚪"; font.pixelSize: 28 * pag.u }
+                            Text {
+                                text: parent.parent.modelData.id + "  " + parent.parent.modelData.nome
+                                color: pag.tema.testo
+                                font.pixelSize: 30 * pag.u
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Text { text: parent.parent.modelData.tipo; color: pag.tema.tenue; font.pixelSize: 24 * pag.u }
+                            Text {
+                                visible: parent.parent.modelData.attiva
+                                text: "CPU " + parent.parent.modelData.cpu + "%   " + parent.parent.modelData.ram + "   " + parent.parent.modelData.uptime
+                                color: pag.tema.tenue
+                                font.pixelSize: 24 * pag.u
+                            }
+                        }
+                    }
                 }
             }
 

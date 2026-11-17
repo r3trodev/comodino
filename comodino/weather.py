@@ -2,7 +2,7 @@
 import json
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 API = "https://api.open-meteo.com/v1/forecast"
 
@@ -72,8 +72,36 @@ def fetch(lat, lon, tz="Europe/Rome", timeout=15):
         "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,"
                  "precipitation_probability_max,sunrise,sunset",
+        "minutely_15": "precipitation",   # per "pioggia tra 20 minuti"
+        "forecast_minutely_15": 8,
     }, timeout)
     return parse(data)
+
+
+def pioggia_imminente(m15, now, soglia=0.1):
+    """Testo breve sulla pioggia dei prossimi 90 minuti (a passi di 15'), '' se niente."""
+    tempi, valori = m15.get("time") or [], m15.get("precipitation") or []
+    slot = [(datetime.fromisoformat(t), v or 0.0) for t, v in zip(tempi, valori)]
+    # ogni valore è la pioggia dei 15 minuti che finiscono a quell'ora
+    # il primo intervallo che finisce dopo "adesso" è quello in corso
+    futuri = [(t, v) for t, v in slot if now <= t <= now + timedelta(minutes=105)]
+    if not futuri:
+        return ""
+
+    def minuti(t):
+        return max(5, int(round((t - now).total_seconds() / 60 / 5) * 5))
+
+    if futuri[0][1] >= soglia:
+        for t, v in futuri[1:]:
+            if v < soglia:
+                return f"Smette di piovere tra ~{minuti(t - timedelta(minutes=15))} min"
+        return "Piove ora"
+    for t, v in futuri[1:]:
+        if v >= soglia:
+            m = minuti(t - timedelta(minutes=15))
+            if m <= 60:
+                return f"Pioggia tra ~{m} min"
+    return ""
 
 
 def direzione(gradi):
@@ -175,6 +203,8 @@ def parse(data, now=None):
         })
         if len(out["ore"]) >= 6:
             break
+
+    out["pioggia_imminente"] = pioggia_imminente(data.get("minutely_15") or {}, now)
 
     d = data["daily"]
     oggi = now.date()

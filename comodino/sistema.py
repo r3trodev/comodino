@@ -141,3 +141,27 @@ def reboot():
 
 def poweroff():
     _run(["systemctl", "poweroff"], timeout=10)
+
+
+def temperature(base="/sys/class/thermal"):
+    """[(tipo, °C)] delle zone termiche (processore, ACPI...)."""
+    from pathlib import Path
+    out = []
+    b = Path(base)
+    for z in sorted(b.glob("thermal_zone*")) if b.is_dir() else []:
+        try:
+            t = int((z / "temp").read_text().strip()) / 1000
+            tipo = (z / "type").read_text().strip()
+        except (OSError, ValueError):
+            continue
+        if -20 < t < 130:
+            out.append((tipo, round(t, 1)))
+    return out
+
+
+def temperatura_processore(base="/sys/class/thermal"):
+    """La più alta tra le zone del processore (o di tutte, se non si riconoscono)."""
+    t = temperature(base)
+    cpu = [v for k, v in t if any(x in k.lower() for x in ("soc", "cpu", "x86_pkg", "core"))]
+    valori = cpu or [v for _, v in t]
+    return max(valori) if valori else None

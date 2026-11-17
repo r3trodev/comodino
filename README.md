@@ -128,6 +128,24 @@ Se la batteria scende sotto la soglia di avviso senza caricare, compare un banne
 Su Home Assistant vengono pubblicati `sensor.comodino_batteria` e `sensor.comodino_batteria_temperatura`
 (da usare per grafici o notifiche; spariscono se HA si riavvia, finché il tablet non li reinvia).
 
+## Sveglie
+- Fino a 10 sveglie con nome, ripetute (giorni scelti) o **una volta sola** (nessun giorno = alla prossima occasione; dopo aver suonato si spegne).
+- **Pisolino** 10/20/30 minuti e **alba simulata**: lo schermo passa dal nero al bianco caldo nei minuti prima della sveglia (tocca per nasconderla).
+- **Dal telefono** via Home Assistant: crea un helper *Data e/o ora* (es. `input_datetime.sveglia_comodino`, solo ora = ogni giorno, con data = una volta) e, se vuoi, un interruttore `input_boolean.sveglia_comodino`; inseriscili da «Da PC». Il Comodino pubblica `sensor.comodino_prossima_sveglia` (timestamp) da vedere nell'app.
+
+## Meteo extra
+- **Pioggia imminente** (Open-Meteo a 15 minuti): «Pioggia tra ~10 min», «Smette di piovere…».
+- **Allerte ufficiali** Meteoalarm (gialla/arancione/rossa) per la zona scelta in Luogo → Zona allerte; visibili anche di notte.
+- **Fase lunare** calcolata in locale.
+
+## Server Proxmox (sola lettura)
+1. In Proxmox: *Datacenter → Permissions → Users* → aggiungi `comodino@pve`; *API Tokens* → aggiungi il token `comodino`
+   (con *Privilege Separation*); *Permissions* → aggiungi per il **token** il ruolo **PVEAuditor** sul percorso `/`.
+2. Da «Da PC»: indirizzo `https://IP:8006`, token ID `comodino@pve!comodino`, segreto.
+3. Sul tablet, scheda 🖧 Server: confronta l'impronta SHA-256 con quella del certificato in Proxmox
+   (*nodo → System → Certificates*) e conferma. Da lì in poi ogni certificato diverso viene rifiutato.
+Se una VM accesa si ferma, compare un avviso rosso sulla schermata principale.
+
 ## Aggiornamenti via GitHub (senza ricompilare la ISO)
 
 Si aggiorna l'**applicazione** (cartella `comodino/`); pacchetti Debian e file di sistema

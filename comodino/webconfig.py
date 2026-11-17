@@ -34,11 +34,16 @@ def campi_modificabili(cfg):
         "luogo": cfg["luogo"],
         "clima": cfg["clima"],
         "agg_repo": cfg["aggiornamenti"]["repo"],
+        "ha_sveglia_ora": cfg["homeassistant"]["sveglia_ora"],
+        "ha_sveglia_attiva": cfg["homeassistant"]["sveglia_attiva"],
+        "px_url": cfg["proxmox"]["url"],
+        "px_token_id": cfg["proxmox"]["token_id"],
+        "px_secret_impostato": bool(cfg["proxmox"]["secret"]),
         "agg_token_impostato": bool(cfg["aggiornamenti"]["token"]),
     }
 
 
-def valida(data):
+def valida(data, attuale=None):
     """Controlla i dati in arrivo dal browser; restituisce il dict da salvare."""
     out = {}
     if "ics_urls" in data:
@@ -68,8 +73,31 @@ def valida(data):
         if not 0 <= a <= 120:
             raise ValueError("anticipo tra 0 e 120 minuti")
         ha["anticipo_min"] = a
+    for campo, chiave in (("ha_sveglia_ora", "sveglia_ora"), ("ha_sveglia_attiva", "sveglia_attiva")):
+        if campo in data:
+            e = data[campo].strip()
+            if e and ("." not in e or " " in e):
+                raise ValueError(f"entità non valida: {e}")
+            ha[chiave] = e
     if ha:
         out["homeassistant"] = ha
+    px = {}
+    if "px_url" in data:
+        u = data["px_url"].strip().rstrip("/")
+        if u and not u.startswith("https://"):
+            raise ValueError("l'indirizzo di Proxmox deve iniziare con https://")
+        px["url"] = u
+        if attuale is None or attuale["proxmox"]["url"] != u:
+            px["fingerprint"] = ""      # nuovo indirizzo: il certificato va riconfermato
+    if "px_token_id" in data:
+        t = data["px_token_id"].strip()
+        if t and not re.fullmatch(r"[\w.-]+@[\w.-]+![\w.-]+", t):
+            raise ValueError("token ID non valido: formato utente@realm!nome")
+        px["token_id"] = t
+    if data.get("px_secret"):
+        px["secret"] = data["px_secret"].strip()
+    if px:
+        out["proxmox"] = px
     if "clima" in data:
         cl = {}
         for k in ("interno_temp", "interno_umidita", "esterno_temp", "esterno_umidita"):
@@ -194,7 +222,7 @@ class WebConfig:
                     if not self.headers.get("Content-Type", "").startswith("application/json"):
                         return self._send(415, "{}", "application/json")
                     try:
-                        cambi = valida(json.loads(self._body()))
+                        cambi = valida(json.loads(self._body()), config.load())
                         config.save_overrides(cambi)
                         web.on_saved()
                         self._send(200, json.dumps({"ok": True}), "application/json")
@@ -242,6 +270,14 @@ PAGINA = f"""<!doctype html><html lang=it><meta charset=utf-8><meta name=viewpor
 <label>Umidità dentro</label><input id=iu placeholder="sensor.camera_umidita">
 <label>Temperatura fuori</label><input id=et placeholder="sensor.balcone_temperatura">
 <label>Umidità fuori</label><input id=eu placeholder="sensor.balcone_umidita">
+<h2>📱 Sveglia dal telefono (helper di Home Assistant)</h2>
+<label>Ora (input_datetime)</label><input id=svora placeholder="input_datetime.sveglia_comodino">
+<label>Attiva (input_boolean, opzionale)</label><input id=svatt placeholder="input_boolean.sveglia_comodino">
+<h2>🖧 Server Proxmox (sola lettura)</h2>
+<label>Indirizzo</label><input id=pxurl placeholder="https://192.168.1.5:8006">
+<label>Token ID</label><input id=pxtid placeholder="comodino@pve!comodino">
+<label>Segreto del token <span id=pxsec class=hint></span></label>
+<input id=pxsecret type=password placeholder="lascia vuoto per non cambiarlo" autocomplete=off>
 <h2>⬆️ Aggiornamenti da GitHub</h2>
 <label>Repository</label><input id=repo placeholder="utente/comodino">
 <label>Token (solo per repository privati) <span id=aggtok class=hint></span></label>
@@ -256,14 +292,17 @@ fetch('/api/config').then(r=>r.json()).then(c=>{{
   $('tokstate').textContent=c.ha_token_impostato?'(già impostato)':'(non impostato)';
   $('it').value=c.clima.interno_temp;$('iu').value=c.clima.interno_umidita;
   $('et').value=c.clima.esterno_temp;$('eu').value=c.clima.esterno_umidita;
-  $('repo').value=c.agg_repo;$('aggtok').textContent=c.agg_token_impostato?'(già impostato)':'';
+  $('repo').value=c.agg_repo;$('svora').value=c.ha_sveglia_ora;$('svatt').value=c.ha_sveglia_attiva;
+  $('pxurl').value=c.px_url;$('pxtid').value=c.px_token_id;$('pxsec').textContent=c.px_secret_impostato?'(già impostato)':'';$('aggtok').textContent=c.agg_token_impostato?'(già impostato)':'';
 }});
 function salva(){{
   const d={{ics_urls:righe($('ics').value),ha_url:$('haurl').value,ha_entita:righe($('haent').value),
            ha_anticipo_min:parseInt($('haant').value||'0'),
            clima:{{interno_temp:$('it').value,interno_umidita:$('iu').value,
                    esterno_temp:$('et').value,esterno_umidita:$('eu').value}},
-           agg_repo:$('repo').value}};
+           agg_repo:$('repo').value,ha_sveglia_ora:$('svora').value,ha_sveglia_attiva:$('svatt').value,
+           px_url:$('pxurl').value,px_token_id:$('pxtid').value}};
+  if($('pxsecret').value)d.px_secret=$('pxsecret').value;
   if($('aggtoken').value)d.agg_token=$('aggtoken').value;
   if($('hatok').value)d.ha_token=$('hatok').value;
   fetch('/api/config',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(d)}})

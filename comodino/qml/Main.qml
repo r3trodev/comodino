@@ -54,9 +54,27 @@ ApplicationWindow {
     function testoSveglia() {
         var s = backend.sveglia
         if (!s.connessa) return "⚠️  Servizio sveglia non attivo"
-        if (s.snooze_fino) return "😴  Rimandata alle " + s.snooze_fino.substr(11, 5)
-        if (!s.attiva) return "⏰  Sveglia spenta"
-        return "⏰  " + pad(s.ora) + ":" + pad(s.minuto) + "   ·   " + giorniTesto(s.giorni)
+        if (!s.prossima) return "⏰  Nessuna sveglia attiva"
+        var p = new Date(s.prossima)
+        var oggi = new Date()
+        var domani = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() + 1)
+        var nomi = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"]
+        var quando = p.toDateString() === oggi.toDateString() ? ""
+                   : p.toDateString() === domani.toDateString() ? "domani " : nomi[p.getDay()] + " "
+        var icona = s.prossima_nome === "Pisolino" ? "😴" : "⏰"
+        return icona + "  " + quando + Qt.formatTime(p, "HH:mm") + (s.prossima_nome ? "   ·   " + s.prossima_nome : "")
+    }
+
+    // Avvisi importanti: allerte meteo e VM ferme (visibili anche di notte)
+    readonly property var avvisi: {
+        var out = []
+        var a = backend.allerte
+        for (var i = 0; i < a.length; i++)
+            out.push({ testo: "⚠️ " + a[i].testo + (a[i].alle ? " (fino a " + a[i].alle + ")" : ""), colore: a[i].colore })
+        var v = backend.server.avvisi || []
+        for (var j = 0; j < v.length; j++)
+            out.push({ testo: "🖧 VM ferma: " + v[j], colore: "#f85149" })
+        return out
     }
 
     // Agenda: da lista Python a ListModel (serve per le sezioni per giorno)
@@ -92,6 +110,7 @@ ApplicationWindow {
             tema: temaApp; u: win.u
             adesso: win.adesso
             testoSveglia: win.testoSveglia()
+            avvisi: win.avvisi
             onApriSveglia: dialogSveglia.apri()
         }
 
@@ -140,7 +159,32 @@ ApplicationWindow {
                     }
                     MouseArea { anchors.fill: parent; onClicked: dialogSveglia.apri() }
                 }
-                Flow {   // entità di Home Assistant (tocca per accendere/spegnere)
+                Column {   // avvisi: allerte meteo e VM ferme
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 22 * win.u
+                spacing: 10 * win.u
+                visible: win.avvisi.length > 0
+                Repeater {
+                    model: win.avvisi
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: avvTxt.implicitWidth + 40 * win.u
+                        height: 64 * win.u
+                        radius: 14 * win.u
+                        color: temaApp.carta
+                        border.width: 2
+                        border.color: modelData.colore
+                        Text {
+                            id: avvTxt
+                            anchors.centerIn: parent
+                            text: parent.modelData.testo
+                            color: win.notte ? temaApp.testo : parent.modelData.colore
+                            font.pixelSize: 26 * win.u
+                        }
+                    }
+                }
+            }
+            Flow {   // entità di Home Assistant (tocca per accendere/spegnere)
                 Layout.fillWidth: true
                 Layout.topMargin: 30 * win.u
                 Layout.leftMargin: 20 * win.u
@@ -228,6 +272,13 @@ ApplicationWindow {
                                     color: temaApp.tenue
                                     font.pixelSize: 34 * win.u
                                 }
+                                Text {
+                                    visible: !!cardMeteo.m.pioggia_imminente
+                                    text: "🌧  " + (cardMeteo.m.pioggia_imminente || "")
+                                    color: temaApp.accento
+                                    font.pixelSize: 28 * win.u
+                                    font.weight: Font.DemiBold
+                                }
                             }
                             Item { Layout.fillWidth: true }
                             ColumnLayout {
@@ -238,7 +289,8 @@ ApplicationWindow {
                                 Text { Layout.alignment: Qt.AlignRight; visible: cardMeteo.m.temp !== undefined; color: temaApp.tenue; font.pixelSize: 28 * win.u
                                        text: "Vento " + cardMeteo.m.vento + " km/h" }
                                 Text { Layout.alignment: Qt.AlignRight; visible: !!cardMeteo.m.alba; color: temaApp.tenue; font.pixelSize: 28 * win.u
-                                       text: "🌅 " + cardMeteo.m.alba + "   🌇 " + cardMeteo.m.tramonto }
+                                       text: "🌅 " + cardMeteo.m.alba + "   🌇 " + cardMeteo.m.tramonto
+                                             + (cardMeteo.m.luna ? "   " + cardMeteo.m.luna.icona : "") }
                             }
                         }
 
@@ -418,6 +470,13 @@ ApplicationWindow {
         }
 
         AlarmDialog { id: dialogSveglia; anchors.fill: parent; z: 500; tema: temaApp; u: win.u }
+
+        Alba {
+            anchors.fill: parent
+            z: 900
+            u: win.u
+            adesso: win.adesso
+        }
 
         RingingOverlay {
             anchors.fill: parent

@@ -9,6 +9,7 @@ Item {
     property real u: 1
     property date adesso: new Date()
     property string testoSveglia: ""
+    property var avvisi: []
     signal apriSveglia()
 
     readonly property var m: backend.meteo
@@ -50,6 +51,17 @@ Item {
                 color: st.tema.testo
                 font.family: st.mono
                 font.pixelSize: 32 * st.u
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                readonly property var av: st.avvisi
+                visible: av.length > 0 || !!st.m.pioggia_imminente
+                text: av.length ? av[0].testo + (av.length > 1 ? "  (+" + (av.length - 1) + ")" : "")
+                                : "🌧 " + st.m.pioggia_imminente
+                color: av.length ? av[0].colore : st.tema.accento
+                font.family: st.mono
+                font.pixelSize: 28 * st.u
+                font.weight: Font.DemiBold
             }
             Item { Layout.fillWidth: true }
             Text {
@@ -157,6 +169,16 @@ Item {
                         Text { text: "🌅 " + (st.m.alba || "--:--"); color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                         Item { Layout.fillWidth: true }
                         Text { text: "🌇 " + (st.m.tramonto || "--:--"); color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !!st.m.luna
+                        Text {
+                            text: st.m.luna ? st.m.luna.icona + " " + st.m.luna.nome + " · " + st.m.luna.illuminazione + "%" : ""
+                            color: st.tema.tenue
+                            font.family: st.mono
+                            font.pixelSize: 26 * st.u
+                        }
                     }
                 }
             }

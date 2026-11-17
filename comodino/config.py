@@ -27,6 +27,7 @@ DEFAULT = {
         "luminosita_giorno": 70,        # percento
         "luminosita_notte": 3,
         "risveglio_tocco_sec": 20,
+        "alba_min": 20,                 # alba simulata: minuti prima della sveglia (0 = off)
     },
     "sveglia": {
         "porta": 47654,                 # solo 127.0.0.1
@@ -42,6 +43,9 @@ DEFAULT = {
         "token": "",                    # token di accesso a lunga durata
         "entita": [],                   # es. ["sensor.temperatura_camera", "light.comodino"]
         "anticipo_min": 15,             # evento "pre" N minuti prima della sveglia (0 = off)
+        "sveglia_ora": "",              # sveglia dal telefono: es. "input_datetime.sveglia_comodino"
+        "sveglia_attiva": "",           # es. "input_boolean.sveglia_comodino" (opzionale)
+        "pubblica_prossima": True,      # sensor.comodino_prossima_sveglia
     },
     "clima": {                          # sensori di Home Assistant (entity_id), opzionali
         "interno_temp": "",             # es. "sensor.camera_temperatura"
@@ -61,6 +65,15 @@ DEFAULT = {
         "repo": "",                     # es. "utente/comodino" (GitHub)
         "token": "",                    # solo per repository privati
         "automatico": True,             # installa di notte (03:00-05:00), mai vicino a una sveglia
+    },
+    "allerte": {
+        "zona": "",                     # area Meteoalarm (scelta dal pannello: Luogo → Zona allerte)
+    },
+    "proxmox": {
+        "url": "",                      # es. "https://192.168.1.5:8006"
+        "token_id": "",                 # es. "comodino@pve!comodino"
+        "secret": "",                   # segreto del token (ruolo PVEAuditor: sola lettura)
+        "fingerprint": "",              # SHA-256 del certificato (fissato al primo collegamento)
     },
     "web": {"porta": 8080, "durata_min": 15},
 }

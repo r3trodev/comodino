@@ -138,58 +138,6 @@ class TestWeather(unittest.TestCase):
         self.assertEqual(out["alba"], "07:04")
 
 
-class TestAlarm(unittest.TestCase):
-    def make(self, **state):
-        cfg = dict(alarmd.config.DEFAULT["sveglia"])
-        a = alarmd.Alarm(cfg)
-        a.state = dict(alarmd.DEFAULT_STATE, **state)
-        return a
-
-    def test_next_weekday(self):
-        a = self.make(attiva=True, ora=7, minuto=0, giorni=[0, 1, 2, 3, 4])
-        fri_evening = datetime(2026, 11, 20, 22, 0)        # venerdì
-        self.assertEqual(a.next_after(fri_evening), datetime(2026, 11, 23, 7, 0))   # lunedì
-        self.assertEqual(a.next_after(datetime(2026, 11, 16, 6, 59)), datetime(2026, 11, 16, 7, 0))
-        self.assertEqual(a.next_after(datetime(2026, 11, 16, 7, 0)), datetime(2026, 11, 17, 7, 0))
-
-    def test_inactive_and_snooze(self):
-        a = self.make(attiva=False)
-        self.assertIsNone(a.next_after(datetime(2026, 11, 16, 6, 0)))
-        a.state["snooze_fino"] = "2026-11-16T07:09:00"
-        self.assertEqual(a.next_after(datetime(2026, 11, 16, 7, 1)), datetime(2026, 11, 16, 7, 9))
-
-    def test_configure_sanitizes(self):
-        a = self.make()
-        a.configure({"attiva": True, "ora": 25, "minuto": 61, "giorni": [6, 6, 0, 9]})
-        self.assertEqual((a.state["ora"], a.state["minuto"], a.state["giorni"]), (1, 1, [0, 2, 6]))
-
-    def test_chime(self):
-        self.make()
-        p = alarmd.config.state_dir() / "chime.wav"
-        self.assertTrue(p.exists() and p.stat().st_size > 100000)
-
-    def test_server_roundtrip(self):
-        import json, socket, threading
-        a = self.make()
-        srv = alarmd.make_server(a, 0)
-        port = srv.server_address[1]
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        with socket.create_connection(("127.0.0.1", port), timeout=2) as s:
-            f = s.makefile("rwb")
-            f.write(b'{"cmd":"imposta","attiva":true,"ora":6,"minuto":45,"giorni":[5]}\n'); f.flush()
-            r = json.loads(f.readline())
-            self.assertTrue(r["ok"])
-            self.assertEqual(r["stato"]["ora"], 6)
-            self.assertFalse(r["stato"]["suona"])
-            f.write(b'{"cmd":"boh"}\n'); f.flush()
-            self.assertFalse(json.loads(f.readline())["ok"])
-        srv.shutdown()
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 # ---------------------------------------------------------------- v0.2: pannello impostazioni
 from comodino import config, geocode, sistema, webconfig  # noqa: E402
 
@@ -294,18 +242,6 @@ class TestWebConfig(unittest.TestCase):
             c.getresponse().read()
             c.close()
         self.assertFalse(w.attivo)
-
-
-class TestPreAlarm(unittest.TestCase):
-    def test_pre_due(self):
-        cfg = dict(alarmd.config.DEFAULT["sveglia"])
-        a = alarmd.Alarm(cfg, {"url": "", "token": "", "anticipo_min": 15})
-        a.state = dict(alarmd.DEFAULT_STATE, attiva=True, ora=7, minuto=0, giorni=[0])
-        self.assertTrue(a.pre_due(datetime(2026, 11, 16, 6, 44, 59), datetime(2026, 11, 16, 6, 45, 0)))
-        self.assertFalse(a.pre_due(datetime(2026, 11, 16, 6, 45, 0), datetime(2026, 11, 16, 6, 45, 1)))
-        self.assertFalse(a.pre_due(datetime(2026, 11, 16, 6, 30), datetime(2026, 11, 16, 6, 31)))
-        a.anticipo = 0
-        self.assertFalse(a.pre_due(datetime(2026, 11, 16, 6, 44, 59), datetime(2026, 11, 16, 6, 45, 0)))
 
 
 # ---------------------------------------------------------------- v0.3: batteria
@@ -734,3 +670,286 @@ class TestOTA(unittest.TestCase):
         self.assertEqual(webconfig.valida({"agg_repo": "mario/comodino"})["aggiornamenti"], {"repo": "mario/comodino"})
         with self.assertRaises(ValueError):
             webconfig.valida({"agg_repo": "https://github.com/x"})
+
+
+
+# ---------------------------------------------------------------- v0.9.1: più sveglie, telefono
+class TestSveglie(unittest.TestCase):
+    def make(self, sveglie=(), **cfg):
+        c = dict(alarmd.config.DEFAULT["sveglia"])
+        a = alarmd.Alarm(c, cfg or None)
+        a.state = {"sveglie": [], "snooze_fino": None}
+        for sv in sveglie:
+            a.salva_sveglia(sv)
+        return a
+
+    def test_piu_sveglie(self):
+        a = self.make([{"nome": "Lavoro", "ora": 7, "minuto": 0, "giorni": [0, 1, 2, 3, 4]},
+                       {"nome": "Weekend", "ora": 9, "minuto": 30, "giorni": [5, 6]}])
+        ven_sera = datetime(2026, 11, 20, 22, 0)
+        at, sv = a.prossima(ven_sera)
+        self.assertEqual((at, sv["nome"]), (datetime(2026, 11, 21, 9, 30), "Weekend"))
+        self.assertEqual(a.prossima(datetime(2026, 11, 16, 6, 0))[1]["nome"], "Lavoro")
+        self.assertEqual([x["id"] for x in a.state["sveglie"]], ["1", "2"])
+
+    def test_una_volta_sola(self):
+        a = self.make()
+        sid = a.salva_sveglia({"nome": "Treno", "ora": 5, "minuto": 40, "data": "2026-11-10"})
+        sv = a.state["sveglie"][0]
+        self.assertEqual(sv["data"], "2026-11-10")
+        a.ringer.start = lambda: None                      # niente audio nei test
+        a.tick(datetime(2026, 11, 10, 5, 39, 59), datetime(2026, 11, 10, 5, 40, 0))
+        self.assertEqual(a.suonando["nome"], "Treno")
+        self.assertFalse(a.state["sveglie"][0]["attiva"])    # si spegne dopo aver suonato
+        self.assertIsNone(a.prossima(datetime(2026, 11, 10, 6, 0))[0])
+        a.attiva_sveglia(sid, True)                        # riattivata: va alla prossima volta
+        self.assertNotEqual(a.state["sveglie"][0]["data"], "2026-11-10")
+
+    def test_senza_giorni_diventa_una_volta(self):
+        a = self.make([{"ora": 6, "minuto": 0, "giorni": []}])
+        self.assertIn("data", a.state["sveglie"][0])
+
+    def test_validazione_e_limite(self):
+        a = self.make([{"nome": "  ", "ora": 25, "minuto": 61, "giorni": [6, 6, 0, 9]}])
+        sv = a.state["sveglie"][0]
+        self.assertEqual((sv["nome"], sv["ora"], sv["minuto"], sv["giorni"]), ("Sveglia", 1, 1, [0, 2, 6]))
+        for _ in range(9):
+            a.salva_sveglia({"ora": 8, "minuto": 0, "giorni": [1]})
+        with self.assertRaises(ValueError):
+            a.salva_sveglia({"ora": 8, "minuto": 0, "giorni": [1]})
+
+    def test_elimina_e_modifica(self):
+        a = self.make([{"nome": "A", "ora": 7, "minuto": 0, "giorni": [0]}, {"nome": "B", "ora": 8, "minuto": 0, "giorni": [0]}])
+        a.salva_sveglia({"id": "1", "nome": "A2", "ora": 6, "minuto": 15, "giorni": [0]})
+        self.assertEqual(a.state["sveglie"][0]["nome"], "A2")
+        a.elimina_sveglia("2")
+        self.assertEqual(len(a.state["sveglie"]), 1)
+        with self.assertRaises(ValueError):
+            a.elimina_sveglia("99")
+
+    def test_migrazione_formato_vecchio(self):
+        import json as _json
+        p = alarmd.config.state_dir() / "sveglia.json"
+        p.write_text(_json.dumps({"attiva": True, "ora": 6, "minuto": 45, "giorni": [0, 1], "snooze_fino": None}))
+        a = alarmd.Alarm(dict(alarmd.config.DEFAULT["sveglia"]))
+        self.assertEqual(a.state["sveglie"][0]["ora"], 6)
+        self.assertNotIn("ora", a.state)
+        p.unlink()
+
+    def test_pisolino(self):
+        a = self.make()
+        a.ringer.start = lambda: None
+        a.pisolino(20)
+        sn = a.snooze_until()
+        a.tick(sn - timedelta(seconds=1), sn)
+        self.assertEqual(a.suonando["nome"], "Pisolino")
+        with self.assertRaises(ValueError):
+            a.pisolino(0)
+
+    def test_pre_sveglia(self):
+        a = self.make([{"ora": 7, "minuto": 0, "giorni": [0]}], anticipo_min=15)
+        self.assertTrue(a.pre_due(datetime(2026, 11, 16, 6, 44, 59), datetime(2026, 11, 16, 6, 45, 0)))
+        self.assertFalse(a.pre_due(datetime(2026, 11, 16, 6, 45, 0), datetime(2026, 11, 16, 6, 45, 1)))
+
+    def test_telefono(self):
+        p = alarmd.parse_ha_sveglia
+        self.assertEqual(p("07:30:00", "on")["giorni"], list(range(7)))
+        sv = p("2026-11-18 06:10:00", None)
+        self.assertEqual((sv["data"], sv["ora"], sv["minuto"], sv["attiva"]), ("2026-11-18", 6, 10, True))
+        self.assertFalse(p("07:30:00", "off")["attiva"])
+        self.assertIsNone(p("unavailable", "on"))
+        a = self.make([{"nome": "Lavoro", "ora": 8, "minuto": 0, "giorni": [1]}])
+        a.imposta_telefono(p("06:30:00", "on"))
+        self.assertEqual(a.prossima(datetime(2026, 11, 17, 0, 0))[1]["nome"], "Dal telefono")
+        st = a.status()
+        self.assertEqual(st["telefono"]["ora"], 6)
+        self.assertEqual(len(st["sveglie"]), 1)                # non viene salvata tra le sveglie
+
+    def test_server(self):
+        import json as _json, socket, threading
+        a = self.make()
+        srv = alarmd.make_server(a, 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        with socket.create_connection(("127.0.0.1", srv.server_address[1]), timeout=2) as sk:
+            f = sk.makefile("rwb")
+            for req in ({"cmd": "salva_sveglia", "sveglia": {"nome": "X", "ora": 6, "minuto": 0, "giorni": [1]}},
+                        {"cmd": "attiva_sveglia", "id": "1", "attiva": False}):
+                f.write((_json.dumps(req) + "\n").encode()); f.flush()
+                r = _json.loads(f.readline())
+                self.assertTrue(r["ok"], r)
+            self.assertFalse(r["stato"]["sveglie"][0]["attiva"])
+            f.write(b'{"cmd":"elimina_sveglia","id":"9"}\n'); f.flush()
+            self.assertFalse(_json.loads(f.readline())["ok"])
+        srv.shutdown()
+
+    def test_chime(self):
+        self.make()
+        p = alarmd.config.state_dir() / "chime.wav"
+        self.assertTrue(p.exists() and p.stat().st_size > 100000)
+
+
+# ---------------------------------------------------------------- v0.9.1: meteo extra, server
+from comodino import allerte as allerte_mod, luna, proxmox  # noqa: E402
+
+
+class TestLuna(unittest.TestCase):
+    def test_fasi_note(self):
+        from datetime import timezone
+        self.assertEqual(luna.fase(datetime(2024, 1, 25, 17, 54, tzinfo=timezone.utc))["nome"], "Luna piena")
+        nuova = luna.fase(datetime(2024, 1, 11, 11, 57, tzinfo=timezone.utc))
+        self.assertEqual((nuova["nome"], nuova["icona"]), ("Luna nuova", "🌑"))
+        self.assertLessEqual(nuova["illuminazione"], 2)
+        self.assertEqual(luna.fase(datetime(2024, 1, 18, 3, 53, tzinfo=timezone.utc))["nome"], "Primo quarto")
+
+
+class TestPioggiaImminente(unittest.TestCase):
+    def m15(self, valori, inizio=datetime(2026, 11, 17, 14, 15)):
+        return {"time": [(inizio + timedelta(minutes=15 * i)).isoformat(timespec="minutes") for i in range(len(valori))],
+                "precipitation": valori}
+
+    def test_casi(self):
+        now = datetime(2026, 11, 17, 14, 20)
+        f = weather.pioggia_imminente
+        # intervalli che finiscono alle 14:15, 14:30, 14:45...; adesso sono le 14:20 (dentro 14:15-14:30)
+        self.assertEqual(f(self.m15([0, 0, 0.4, 1.2, 0, 0]), now), "Pioggia tra ~10 min")     # dalle 14:30
+        self.assertEqual(f(self.m15([0, 0, 0, 0, 0.3, 0]), now), "Pioggia tra ~40 min")       # dalle 15:00
+        self.assertEqual(f(self.m15([0.9, 0.6, 0.8, 0, 0, 0]), now), "Smette di piovere tra ~25 min")
+        self.assertEqual(f(self.m15([0, 0.5] + [0.5] * 6), now), "Piove ora")
+        self.assertEqual(f(self.m15([0.7, 0, 0, 0, 0, 0, 0, 0]), now), "")                    # è già finita
+        self.assertEqual(f(self.m15([0] * 8), now), "")
+        self.assertEqual(f({}, now), "")
+
+
+def _cap(area, livello, tipo, onset, expires, lang="it-IT", msg="Alert"):
+    return {"alert": {"msgType": msg, "info": [
+        {"language": "en-GB", "event": "Wind warning", "area": [{"areaDesc": area}], "parameter": []},
+        {"language": lang, "event": "Avviso", "headline": "Allerta per vento forte",
+         "onset": onset, "expires": expires, "area": [{"areaDesc": area}],
+         "parameter": [{"valueName": "awareness_level", "value": f"{livello}; orange; Severe"},
+                       {"valueName": "awareness_type", "value": f"{tipo}; Wind"}]}]}}
+
+
+class TestAllerte(unittest.TestCase):
+    def test_parse(self):
+        from datetime import timezone
+        now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+        data = {"warnings": [
+            _cap("Sicilia - Palermo", 3, 1, "2026-11-17T06:00:00+01:00", "2026-11-17T23:59:00+01:00"),
+            _cap("Sicilia - Palermo", 2, 3, "2026-11-18T06:00:00+01:00", "2026-11-18T20:00:00+01:00"),
+            _cap("Sicilia - Palermo", 4, 10, "2026-11-20T06:00:00+01:00", "2026-11-20T20:00:00+01:00"),  # tra 3 giorni
+            _cap("Sicilia - Palermo", 2, 4, "2026-11-16T06:00:00+01:00", "2026-11-16T20:00:00+01:00"),   # scaduta
+            _cap("Lombardia", 4, 1, "2026-11-17T06:00:00+01:00", "2026-11-17T23:00:00+01:00"),          # altra zona
+            _cap("Sicilia - Palermo", 3, 1, "2026-11-17T06:00:00+01:00", "2026-11-17T23:59:00+01:00", msg="Cancel"),
+        ]}
+        a = allerte_mod.parse(data, "palermo", now)
+        self.assertEqual([x["testo"] for x in a], ["Allerta arancione: Vento", "Allerta gialla: Temporali"])
+        self.assertTrue(a[0]["in_corso"])
+        self.assertFalse(a[1]["in_corso"])
+        self.assertEqual(a[0]["dettaglio"], "Allerta per vento forte")       # testo in italiano
+        self.assertEqual(allerte_mod.parse(data, "", now), [])
+        self.assertEqual(allerte_mod.zone(data), ["Lombardia", "Sicilia - Palermo"])
+
+
+class TestProxmox(unittest.TestCase):
+    RISORSE = [
+        {"type": "node", "node": "pve", "status": "online", "cpu": 0.123, "mem": 6 * 1024 ** 3,
+         "maxmem": 16 * 1024 ** 3, "uptime": 3 * 86400 + 4 * 3600},
+        {"type": "qemu", "vmid": 101, "name": "haos", "status": "running", "cpu": 0.05,
+         "mem": 2 * 1024 ** 3, "maxmem": 4 * 1024 ** 3, "uptime": 7200},
+        {"type": "lxc", "vmid": 102, "name": "pihole", "status": "stopped", "maxmem": 1024 ** 3},
+        {"type": "storage", "storage": "local"},
+    ]
+
+    def test_riassunto(self):
+        r = proxmox.riassunto(self.RISORSE)
+        self.assertEqual((r["attive"], r["totale"]), (1, 2))
+        self.assertEqual(r["nodi"][0]["cpu"], 12)
+        self.assertEqual(r["nodi"][0]["uptime"], "3g 4h")
+        self.assertEqual([(v["tipo"], v["nome"]) for v in r["vm"]], [("VM", "haos"), ("CT", "pihole")])
+
+    def test_nuove_fermate(self):
+        prima = proxmox.riassunto(self.RISORSE)["vm"]
+        dopo = [dict(v, attiva=False) if v["nome"] == "haos" else v for v in prima]
+        self.assertEqual(proxmox.nuove_fermate(prima, dopo), ["haos"])
+        self.assertEqual(proxmox.nuove_fermate(prima, prima), [])
+
+    def test_certificato_fissato(self):
+        """Server TLS vero con certificato autofirmato: impronta da confermare, poi fissata."""
+        import http.server
+        import json as _json
+        import ssl
+        import subprocess
+        import threading
+        d = tempfile.mkdtemp()
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256",
+                        "-nodes", "-keyout", f"{d}/k.pem", "-out", f"{d}/c.pem", "-days", "1",
+                        "-subj", "/CN=pve"], check=True, capture_output=True)
+        visti = []
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                visti.append(self.headers.get("Authorization"))
+                body = _json.dumps({"data": TestProxmox.RISORSE}).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(f"{d}/c.pem", f"{d}/k.pem")
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"https://127.0.0.1:{srv.server_address[1]}"
+        tid, sec = "comodino@pve!comodino", "segreto"
+
+        with self.assertRaises(proxmox.CertificatoDaConfermare) as cm:
+            proxmox.Proxmox(url, tid, sec).stato()
+        impronta = cm.exception.impronta
+        self.assertEqual(visti, [])                                  # il token non è partito
+        self.assertEqual(proxmox.Proxmox(url, tid, sec).impronta_attuale(), impronta)
+
+        r = proxmox.Proxmox(url, tid, sec, impronta).stato()
+        self.assertEqual(r["totale"], 2)
+        self.assertEqual(visti, [f"PVEAPIToken={tid}={sec}"])
+
+        sbagliata = "AA:" * 31 + "AA"
+        with self.assertRaisesRegex(ValueError, "certificato del server è cambiato"):
+            proxmox.Proxmox(url, tid, sec, sbagliata).stato()
+        self.assertEqual(len(visti), 1)                              # nemmeno qui
+        srv.shutdown()
+
+
+class TestTemperature(unittest.TestCase):
+    def test_zone(self):
+        from pathlib import Path
+        b = Path(tempfile.mkdtemp())
+        for i, (tipo, mc) in enumerate((("acpitz", "45000"), ("soc_dts0", "52500"), ("soc_dts1", "51000"), ("rotto", "x"))):
+            z = b / f"thermal_zone{i}"
+            z.mkdir()
+            (z / "type").write_text(tipo + "\n")
+            (z / "temp").write_text(mc + "\n")
+        self.assertEqual(sistema.temperatura_processore(str(b)), 52.5)
+        self.assertIsNone(sistema.temperatura_processore("/inesistente"))
+        m = batteria.BatteryManager(full_cfg(), fake_sysfs(cap=50), termico=str(b))
+        m.tick()
+        self.assertEqual((m.stato["temp_processore"], m.stato["caldo"]), (52.5, False))
+
+
+class TestWebNuoviCampi(unittest.TestCase):
+    def test_proxmox_e_telefono(self):
+        cfg = config.load()
+        out = webconfig.valida({"px_url": "https://10.0.0.5:8006/", "px_token_id": "comodino@pve!comodino",
+                                "px_secret": "x", "ha_sveglia_ora": "input_datetime.sveglia"}, cfg)
+        self.assertEqual(out["proxmox"]["url"], "https://10.0.0.5:8006")
+        self.assertEqual(out["proxmox"]["fingerprint"], "")            # nuovo indirizzo -> riconferma
+        self.assertEqual(out["homeassistant"]["sveglia_ora"], "input_datetime.sveglia")
+        cfg["proxmox"]["url"] = "https://10.0.0.5:8006"
+        stesso = webconfig.valida({"px_url": "https://10.0.0.5:8006"}, cfg)
+        self.assertNotIn("fingerprint", stesso["proxmox"])              # stesso indirizzo: resta fissata
+        for bad in ({"px_url": "http://10.0.0.5:8006"}, {"px_token_id": "root"}, {"ha_sveglia_ora": "sveglia"}):
+            with self.assertRaises(ValueError):
+                webconfig.valida(bad, cfg)

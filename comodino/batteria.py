@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .homeassistant import HomeAssistant
+from .sistema import temperatura_processore
 
 log = logging.getLogger("batteria")
 SYS = Path("/sys/class/power_supply")
@@ -108,8 +109,9 @@ class BatteryManager:
     RIPETI_DOPO = 120         # non ripetere lo stesso comando prima di N secondi
     SENSORI_OGNI = 120
 
-    def __init__(self, full_cfg, root=SYS):
+    def __init__(self, full_cfg, root=SYS, termico="/sys/class/thermal"):
         self.root = root
+        self.termico = termico
         self.stato = {"presente": False}
         self._wake = threading.Event()
         self._ultimo_cmd = (None, float("-inf"))
@@ -137,8 +139,10 @@ class BatteryManager:
     def tick(self):
         b = leggi(self.root)
         c = self.cfg
+        soc = temperatura_processore(self.termico) if self.termico else None
         st = dict(b, min=c["min"], max=c["max"], allarme=c["allarme_min"], presa=c["presa"],
-                  metodo="assente", avviso=False)
+                  metodo="assente", avviso=False, temp_processore=soc,
+                  caldo=soc is not None and soc >= 75)
         if not b["presente"]:
             self.stato = dict(st, azione=self._azione, errore=self._errore)
             return
@@ -209,6 +213,11 @@ class BatteryManager:
                 "alimentato": b["alimentato"],
                 "stato": b["stato_it"],
             })
+            if self.stato.get("temp_processore") is not None:
+                self.ha.imposta_stato("sensor.comodino_temperatura_processore", self.stato["temp_processore"], {
+                    "unit_of_measurement": "°C", "device_class": "temperature",
+                    "state_class": "measurement", "friendly_name": "Comodino temperatura processore",
+                })
             if b["temperatura"] is not None:
                 self.ha.imposta_stato("sensor.comodino_batteria_temperatura", b["temperatura"], {
                     "unit_of_measurement": "°C",
