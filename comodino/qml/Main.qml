@@ -580,7 +580,7 @@ ApplicationWindow {
             radius: width / 2
             color: "transparent"
             opacity: win.notte ? 0.25 : 0.8
-            Text { anchors.centerIn: parent; text: "⚙️"; font.pixelSize: 74 * win.u }
+            Text { anchors.centerIn: parent; text: "⚙️"; font.family: "Noto Color Emoji"; font.pixelSize: 74 * win.u }
             MouseArea { anchors.fill: parent; onClicked: impostazioni.apri() }
         }
 

@@ -22,6 +22,8 @@ Item {
     Text {
         anchors.centerIn: parent
         text: ic.testo
+        // font a colori esplicito: altrimenti ☁ ☀ ⛅ ❄ ⛈ escono in bianco e nero da DejaVu
+        font.family: "Noto Color Emoji"
         font.pixelSize: ic.dim * 0.6
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

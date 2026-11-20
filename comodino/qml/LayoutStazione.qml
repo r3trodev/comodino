@@ -19,6 +19,7 @@ Item {
     readonly property var cl: backend.clima
     readonly property string mono: "DejaVu Sans Mono"
     readonly property string lcd: "DSEG7 Classic"
+    readonly property string emoji: "Noto Color Emoji"     // icone sempre a colori
 
     function nd(v, suff) { return (v === undefined || v === null) ? "—" : v + (suff || "") }
     function maiuscola(s) { return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s }
@@ -229,10 +230,10 @@ Item {
                         Layout.leftMargin: 14 * st.u
                         Layout.rightMargin: 24 * st.u
                         spacing: 12 * st.u
-                        Text { text: "🌅"; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
+                        Text { text: "🌅"; font.family: st.emoji; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
                         Text { text: st.m.alba || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                         Item { Layout.fillWidth: true }
-                        Text { text: "🌇"; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
+                        Text { text: "🌇"; font.family: st.emoji; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
                         Text { text: st.m.tramonto || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                     }
                     RowLayout {
@@ -240,8 +241,15 @@ Item {
                         Layout.leftMargin: 14 * st.u
                         Layout.rightMargin: 24 * st.u
                         visible: !!st.m.luna
+                        spacing: 12 * st.u
                         Text {
-                            text: st.m.luna ? st.m.luna.icona + " " + st.m.luna.nome + " · " + st.m.luna.illuminazione + "%" : ""
+                            text: st.m.luna ? st.m.luna.icona : ""
+                            font.family: st.emoji
+                            font.pixelSize: 28 * st.u
+                            Layout.preferredWidth: 44 * st.u
+                        }
+                        Text {
+                            text: st.m.luna ? st.m.luna.nome + " · " + st.m.luna.illuminazione + "%" : ""
                             color: st.tema.tenue
                             font.family: st.mono
                             font.pixelSize: 26 * st.u
@@ -291,7 +299,7 @@ Item {
                             { i: "🧭", t: "Direzione", v: st.m.direzione ? st.m.direzione + " " + st.m.direzione_gradi + "°" : "—" },
                             { i: "☀️", t: "Indice UV", v: st.nd(st.m.uv) },
                             { i: "☔", t: "Pioggia", v: st.nd(st.m.pioggia_mm, " mm") },
-                            { i: "👁", t: "Visibilità", v: st.nd(st.m.visibilita_km, " km") },
+                            { i: "👁️", t: "Visibilità", v: st.nd(st.m.visibilita_km, " km") },
                             { i: "📈", t: "Pressione", v: st.nd(st.m.pressione, " hPa") }
                         ]
                         delegate: RowLayout {
@@ -299,7 +307,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             spacing: 16 * st.u
-                            Text { text: parent.modelData.i; font.pixelSize: 34 * st.u; Layout.preferredWidth: 52 * st.u }
+                            Text { text: parent.modelData.i; font.family: st.emoji; font.pixelSize: 34 * st.u; Layout.preferredWidth: 52 * st.u }
                             Text { text: parent.modelData.t; color: st.tema.tenue; font.family: st.mono; font.pixelSize: 30 * st.u }
                             Item { Layout.fillWidth: true }
                             Text { text: parent.modelData.v; color: st.tema.testo; font.family: st.mono; font.pixelSize: 42 * st.u }
@@ -388,6 +396,7 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: "⚙️"
+                        font.family: st.emoji
                         font.pixelSize: 66 * st.u
                     }
                     MouseArea { anchors.fill: parent; anchors.margins: -8 * st.u; onClicked: st.apriImpostazioni() }
