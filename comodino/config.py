@@ -52,6 +52,7 @@ DEFAULT = {
         "interno_umidita": "",
         "esterno_temp": "",             # se vuoto: si usa la temperatura di Open-Meteo
         "esterno_umidita": "",
+        "esterno_batteria": "",         # pila del termometro; vuoto = ricavata da esterno_temp (RFLink: *_bat)
     },
     "batteria": {
         "gestione": True,               # False = solo lettura

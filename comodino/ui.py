@@ -24,7 +24,7 @@ from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot  # 
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 
-from . import allerte, config, geocode, icsparse, luna, ota, proxmox, sistema, weather  # noqa: E402
+from . import allerte, config, geocode, homeassistant, icsparse, luna, ota, proxmox, sistema, weather  # noqa: E402
 from .luminosita import Backlight  # noqa: E402
 from .homeassistant import HomeAssistant  # noqa: E402
 from .webconfig import WebConfig  # noqa: E402
@@ -335,28 +335,14 @@ class Backend(QObject):
         self.serverChanged.emit()
 
     def _leggi_clima(self, ha):
-        """{'interno': {temp, umidita}, 'esterno': {...}} dai sensori di HA (se configurati)."""
+        """{'interno': {...}, 'esterno': {...}} dai sensori di HA (se configurati)."""
         c = self.cfg["clima"]
-        out = {}
         if not ha.configurato:
-            return out
-        ids = {k: v for k, v in c.items() if v}
+            return {}
+        ids = homeassistant.entita_clima(c)
         if not ids:
-            return out
-        stati = {s["id"]: s for s in ha.stati(list(ids.values()))}
-        for luogo in ("interno", "esterno"):
-            val = {}
-            for grandezza in ("temp", "umidita"):
-                eid = c.get(f"{luogo}_{grandezza}")
-                try:
-                    v = float(stati[eid]["stato"]) if eid else None
-                except (KeyError, TypeError, ValueError):
-                    v = None
-                if v is not None:
-                    val[grandezza] = round(v, 1) if grandezza == "temp" else round(v)
-            if val:
-                out[luogo] = val
-        return out
+            return {}
+        return homeassistant.clima_da_stati(c, ha.stati(list(dict.fromkeys(ids.values()))))
 
     @Slot(object)
     def _set_clima(self, data):

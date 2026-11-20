@@ -982,3 +982,50 @@ class TestSpiaServer(unittest.TestCase):
         self.assertEqual(sp({"configurato": True, "ok": False, "errore": "x"})["testo"], "Server non raggiungibile")
         self.assertEqual(sp({"configurato": True, "ok": False, "impronta_nuova": "AA"})["livello"], "attenzione")
         self.assertEqual(self.dati()["nodi"][0]["ram_pct"], 25)
+
+
+# ---------------------------------------------------------------- v0.9.4: termometro misurato
+from datetime import timezone  # noqa: E402
+class TestClimaMisurato(unittest.TestCase):
+    def setUp(self):
+        from comodino import homeassistant
+        self.ha = homeassistant
+        self.c = {"interno_temp": "", "interno_umidita": "",
+                  "esterno_temp": "sensor.xiron_0801_temp", "esterno_umidita": "sensor.xiron_0801_hum",
+                  "esterno_batteria": ""}
+        self.ora = datetime(2026, 11, 20, 2, 0, tzinfo=timezone.utc)
+
+    def _s(self, eid, stato, minuti_fa=1):
+        t = (self.ora - timedelta(minutes=minuti_fa)).isoformat()
+        return {"id": eid, "stato": stato, "aggiornato": t}
+
+    def test_pila_ricavata_da_rflink(self):
+        self.assertEqual(self.ha.entita_clima(self.c)["esterno_batteria"], "sensor.xiron_0801_bat")
+        c = dict(self.c, esterno_batteria="sensor.altra_pila")
+        self.assertEqual(self.ha.entita_clima(c)["esterno_batteria"], "sensor.altra_pila")
+        c = dict(self.c, esterno_temp="sensor.balcone")
+        self.assertNotIn("esterno_batteria", self.ha.entita_clima(c))
+
+    def test_misura_e_pila(self):
+        out = self.ha.clima_da_stati(self.c, [
+            self._s("sensor.xiron_0801_temp", "22.34"), self._s("sensor.xiron_0801_hum", "34"),
+            self._s("sensor.xiron_0801_bat", "low")], self.ora)
+        self.assertEqual(out, {"esterno": {"temp": 22.3, "umidita": 34, "pila_scarica": True}})
+        out = self.ha.clima_da_stati(self.c, [
+            self._s("sensor.xiron_0801_temp", "-1.0"), self._s("sensor.xiron_0801_bat", "ok")], self.ora)
+        self.assertEqual(out, {"esterno": {"temp": -1.0}})
+
+    def test_sensore_muto(self):
+        out = self.ha.clima_da_stati(self.c, [self._s("sensor.xiron_0801_temp", "22", minuti_fa=180)], self.ora)
+        self.assertEqual(out, {"esterno": {"vecchio": True}})
+        out = self.ha.clima_da_stati(self.c, [self._s("sensor.xiron_0801_temp", "unavailable")], self.ora)
+        self.assertEqual(out, {})
+
+    def test_pila_numerica(self):
+        self.assertTrue(self.ha.pila_scarica("10"))
+        self.assertFalse(self.ha.pila_scarica("80"))
+        self.assertFalse(self.ha.pila_scarica("unknown"))
+
+    def test_web_pila(self):
+        out = webconfig.valida({"clima": {"esterno_batteria": "sensor.xiron_0801_bat"}})
+        self.assertEqual(out["clima"]["esterno_batteria"], "sensor.xiron_0801_bat")

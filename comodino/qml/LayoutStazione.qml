@@ -102,11 +102,14 @@ Item {
                         font.pixelSize: 30 * st.u
                     }
                     Text {
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
                         text: Qt.formatTime(st.adesso, "HH:mm")
                         color: st.tema.testo
                         font.family: st.lcd
                         font.pixelSize: 170 * st.u
+                        fontSizeMode: Text.HorizontalFit     // non esce mai dal pannello
+                        minimumPixelSize: 60 * st.u
                     }
                     RowLayout {
                         spacing: 20 * st.u
@@ -124,55 +127,97 @@ Item {
                     }
                     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 2; color: st.linea }
 
-                    // Fuori / Dentro
+                    // Fuori / Dentro: la misura del termometro se c'è, altrimenti la previsione
                     Repeater {
-                        model: [
-                            { nome: "Fuori", dati: st.cl.esterno || { temp: st.m.temp_decimale, umidita: st.m.umidita },
-                              nota: st.cl.esterno ? "" : "previsione" },
-                            { nome: "Dentro", dati: st.cl.interno || {}, nota: st.cl.interno ? "" : "nessun sensore" }
-                        ]
-                        delegate: ColumnLayout {
-                            required property var modelData
-                            spacing: 2
-                            Text {
-                                text: parent.modelData.nome + (parent.modelData.nota ? "  (" + parent.modelData.nota + ")" : "")
-                                color: st.tema.tenue
-                                font.family: st.mono
-                                font.pixelSize: 24 * st.u
+                        model: {
+                            var e = st.cl.esterno || {}
+                            var i = st.cl.interno || {}
+                            var misurata = e.temp !== undefined
+                            var fuori = {
+                                nome: "Fuori",
+                                dati: misurata ? { temp: e.temp, umidita: e.umidita !== undefined ? e.umidita : st.m.umidita }
+                                               : { temp: st.m.temp_decimale, umidita: st.m.umidita },
+                                nota: misurata ? "misurata" : (e.vecchio ? "termometro muto · previsione" : "previsione"),
+                                extra: misurata && st.m.temp_decimale !== undefined ? "modello " + st.m.temp_decimale + "°" : "",
+                                avviso: e.pila_scarica ? "🪫 cambia la pila del termometro" : ""
                             }
+                            var dentro = {
+                                nome: "Dentro",
+                                dati: i,
+                                nota: i.temp !== undefined ? "" : (i.vecchio ? "termometro muto" : "nessun sensore"),
+                                extra: st.comfort(i.temp, i.umidita),
+                                avviso: ""
+                            }
+                            return [fuori, dentro]
+                        }
+                        delegate: ColumnLayout {
+                            id: riga
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 0
                             RowLayout {
-                                spacing: 26 * st.u
+                                Layout.fillWidth: true
+                                spacing: 14 * st.u
                                 Text {
-                                    text: "🌡 " + st.nd(parent.parent.modelData.dati.temp, "°")
-                                    color: st.tema.testo
-                                    font.family: st.mono
-                                    font.pixelSize: 44 * st.u
-                                }
-                                Text {
-                                    text: "💧 " + st.nd(parent.parent.modelData.dati.umidita, "%")
-                                    color: st.tema.testo
-                                    font.family: st.mono
-                                    font.pixelSize: 44 * st.u
-                                }
-                                Text {
-                                    visible: parent.parent.modelData.nome === "Dentro"
-                                    text: st.comfort(parent.parent.modelData.dati.temp, parent.parent.modelData.dati.umidita)
+                                    text: riga.modelData.nome + (riga.modelData.nota ? " · " + riga.modelData.nota : "")
                                     color: st.tema.tenue
+                                    font.family: st.mono
+                                    font.pixelSize: 28 * st.u
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    Layout.rightMargin: 12 * st.u
+                                    visible: riga.modelData.extra !== ""
+                                    text: riga.modelData.extra
+                                    color: st.tema.tenue
+                                    font.family: st.mono
                                     font.pixelSize: 26 * st.u
                                 }
+                            }
+                            RowLayout {
+                                spacing: 34 * st.u
+                                Text {
+                                    text: "🌡 " + st.nd(riga.modelData.dati.temp, "°")
+                                    color: st.tema.testo
+                                    font.family: st.mono
+                                    font.pixelSize: 64 * st.u
+                                    font.weight: Font.DemiBold
+                                }
+                                Text {
+                                    text: "💧 " + st.nd(riga.modelData.dati.umidita, "%")
+                                    color: st.tema.testo
+                                    font.family: st.mono
+                                    font.pixelSize: 64 * st.u
+                                }
+                            }
+                            Text {
+                                visible: riga.modelData.avviso !== ""
+                                text: riga.modelData.avviso
+                                color: "#f0883e"
+                                font.family: st.mono
+                                font.pixelSize: 24 * st.u
                             }
                         }
                     }
                     Item { Layout.fillHeight: true }
                     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 2; color: st.linea }
+                    // alba e tramonto: icona e ora separate, con margine dal bordo del pannello
+                    // (la larghezza delle emoji a colori non sempre viene misurata bene)
                     RowLayout {
                         Layout.fillWidth: true
-                        Text { text: "🌅 " + (st.m.alba || "--:--"); color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
+                        Layout.leftMargin: 14 * st.u
+                        Layout.rightMargin: 24 * st.u
+                        spacing: 12 * st.u
+                        Text { text: "🌅"; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
+                        Text { text: st.m.alba || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                         Item { Layout.fillWidth: true }
-                        Text { text: "🌇 " + (st.m.tramonto || "--:--"); color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
+                        Text { text: "🌇"; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
+                        Text { text: st.m.tramonto || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                     }
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.leftMargin: 14 * st.u
+                        Layout.rightMargin: 24 * st.u
                         visible: !!st.m.luna
                         Text {
                             text: st.m.luna ? st.m.luna.icona + " " + st.m.luna.nome + " · " + st.m.luna.illuminazione + "%" : ""

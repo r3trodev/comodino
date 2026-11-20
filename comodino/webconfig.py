@@ -100,7 +100,7 @@ def valida(data, attuale=None):
         out["proxmox"] = px
     if "clima" in data:
         cl = {}
-        for k in ("interno_temp", "interno_umidita", "esterno_temp", "esterno_umidita"):
+        for k in ("interno_temp", "interno_umidita", "esterno_temp", "esterno_umidita", "esterno_batteria"):
             v = (data["clima"].get(k) or "").strip()
             if v and ("." not in v or " " in v):
                 raise ValueError(f"sensore non valido: {v}")
@@ -270,6 +270,7 @@ PAGINA = f"""<!doctype html><html lang=it><meta charset=utf-8><meta name=viewpor
 <label>Umidità dentro</label><input id=iu placeholder="sensor.camera_umidita">
 <label>Temperatura fuori</label><input id=et placeholder="sensor.balcone_temperatura">
 <label>Umidità fuori</label><input id=eu placeholder="sensor.balcone_umidita">
+<label>Pila del termometro fuori <span class=hint>(facoltativo: con RFLink si trova da sola)</span></label><input id=eb placeholder="sensor.xiron_0801_bat">
 <h2>📱 Sveglia dal telefono (helper di Home Assistant)</h2>
 <label>Ora (input_datetime)</label><input id=svora placeholder="input_datetime.sveglia_comodino">
 <label>Attiva (input_boolean, opzionale)</label><input id=svatt placeholder="input_boolean.sveglia_comodino">
@@ -291,7 +292,7 @@ fetch('/api/config').then(r=>r.json()).then(c=>{{
   $('haent').value=c.ha_entita.join('\\n');$('haant').value=c.ha_anticipo_min;
   $('tokstate').textContent=c.ha_token_impostato?'(già impostato)':'(non impostato)';
   $('it').value=c.clima.interno_temp;$('iu').value=c.clima.interno_umidita;
-  $('et').value=c.clima.esterno_temp;$('eu').value=c.clima.esterno_umidita;
+  $('et').value=c.clima.esterno_temp;$('eu').value=c.clima.esterno_umidita;$('eb').value=c.clima.esterno_batteria||'';
   $('repo').value=c.agg_repo;$('svora').value=c.ha_sveglia_ora;$('svatt').value=c.ha_sveglia_attiva;
   $('pxurl').value=c.px_url;$('pxtid').value=c.px_token_id;$('pxsec').textContent=c.px_secret_impostato?'(già impostato)':'';$('aggtok').textContent=c.agg_token_impostato?'(già impostato)':'';
 }});
@@ -299,7 +300,7 @@ function salva(){{
   const d={{ics_urls:righe($('ics').value),ha_url:$('haurl').value,ha_entita:righe($('haent').value),
            ha_anticipo_min:parseInt($('haant').value||'0'),
            clima:{{interno_temp:$('it').value,interno_umidita:$('iu').value,
-                   esterno_temp:$('et').value,esterno_umidita:$('eu').value}},
+                   esterno_temp:$('et').value,esterno_umidita:$('eu').value,esterno_batteria:$('eb').value}},
            agg_repo:$('repo').value,ha_sveglia_ora:$('svora').value,ha_sveglia_attiva:$('svatt').value,
            px_url:$('pxurl').value,px_token_id:$('pxtid').value}};
   if($('pxsecret').value)d.px_secret=$('pxsecret').value;

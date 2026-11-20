@@ -245,8 +245,9 @@ ApplicationWindow {
             Text {   // di notte: riassunto minimo al posto dei pannelli
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 30 * win.u
-                    visible: win.notte && backend.meteo.temp !== undefined
-                    text: (backend.meteo.icona || "") + "  " + backend.meteo.temp + "°"
+                    readonly property var est: backend.clima.esterno || ({})
+                    visible: win.notte && (backend.meteo.temp !== undefined || est.temp !== undefined)
+                    text: (backend.meteo.icona || "") + "  " + (est.temp !== undefined ? est.temp : backend.meteo.temp) + "°"
                     color: temaApp.tenue
                     font.pixelSize: 48 * win.u
                 }
@@ -264,6 +265,8 @@ ApplicationWindow {
                 Rectangle {
                     id: cardMeteo
                     readonly property var m: backend.meteo
+                    readonly property var est: backend.clima.esterno || ({})
+                    readonly property bool misurata: est.temp !== undefined
                     readonly property int nOre: (m.ore || []).length
                     readonly property int nGiorni: (m.giorni || []).length
                     Layout.fillWidth: true
@@ -284,9 +287,23 @@ ApplicationWindow {
                             ColumnLayout {
                                 spacing: 0
                                 Text {
-                                    text: cardMeteo.m.temp !== undefined ? cardMeteo.m.temp + "°" : "--°"
+                                    text: cardMeteo.misurata ? cardMeteo.est.temp + "°"
+                                          : (cardMeteo.m.temp !== undefined ? cardMeteo.m.temp + "°" : "--°")
                                     color: temaApp.testo
                                     font.pixelSize: 112 * win.u
+                                }
+                                Text {   // termometro di casa: si vede anche quanto sbaglia il modello
+                                    visible: cardMeteo.misurata
+                                    text: "📡 misurata" + (cardMeteo.m.temp_decimale !== undefined
+                                          ? " · modello " + cardMeteo.m.temp_decimale + "°" : "")
+                                    color: temaApp.tenue
+                                    font.pixelSize: 26 * win.u
+                                }
+                                Text {
+                                    visible: !!cardMeteo.est.pila_scarica
+                                    text: "🪫 cambia la pila del termometro"
+                                    color: "#f0883e"
+                                    font.pixelSize: 26 * win.u
                                 }
                                 Text {
                                     text: cardMeteo.m.descrizione || "Caricamento meteo…"
@@ -306,7 +323,8 @@ ApplicationWindow {
                                 spacing: 6 * win.u
                                 Text { Layout.alignment: Qt.AlignRight; text: backend.citta; color: temaApp.testo; font.pixelSize: 36 * win.u; font.weight: Font.DemiBold }
                                 Text { Layout.alignment: Qt.AlignRight; visible: cardMeteo.m.temp !== undefined; color: temaApp.tenue; font.pixelSize: 28 * win.u
-                                       text: "Percepita " + cardMeteo.m.percepita + "° · Umidità " + cardMeteo.m.umidita + "%" }
+                                       text: "Percepita " + cardMeteo.m.percepita + "° · Umidità "
+                                             + (cardMeteo.est.umidita !== undefined ? cardMeteo.est.umidita : cardMeteo.m.umidita) + "%" }
                                 Text { Layout.alignment: Qt.AlignRight; visible: cardMeteo.m.temp !== undefined; color: temaApp.tenue; font.pixelSize: 28 * win.u
                                        text: "Vento " + cardMeteo.m.vento + " km/h" }
                                 Text { Layout.alignment: Qt.AlignRight; visible: !!cardMeteo.m.alba; color: temaApp.tenue; font.pixelSize: 28 * win.u

@@ -91,6 +91,13 @@ o con `dd`. Dal menu di boot puoi:
 Le modifiche dal pannello vanno in `~/.local/state/comodino/impostazioni.json` (permessi 600)
 e hanno la precedenza su `/etc/comodino/config.toml`.
 
+### Termometro di casa (es. 433 MHz con RFLink su Home Assistant)
+Se in «Da PC» è impostato un sensore di temperatura esterno, il Comodino mostra la temperatura
+**misurata** al posto di quella di Open-Meteo (che resta visibile, piccola, come «modello»).
+Se il sensore non trasmette da più di un'ora si torna alla previsione. La pila del termometro
+si trova da sola per RFLink (`sensor.xxx_temp` → `sensor.xxx_bat`), oppure si indica a mano;
+quando è scarica compare «cambia la pila del termometro».
+
 ### Layout Stazione
 Tre colonne più una barra: ora con cifre a 7 segmenti, meteo attuale e max/min, **Fuori/Dentro**
 (sensori di Home Assistant, impostabili da «Da PC»; senza sensore esterno si usa Open-Meteo),
@@ -149,9 +156,33 @@ Se una VM accesa si ferma, compare un avviso rosso sulla schermata principale.
 ## Aggiornamenti via GitHub (senza ricompilare la ISO)
 
 Si aggiorna l'**applicazione** (cartella `comodino/`); pacchetti Debian e file di sistema
-restano quelli della ISO. Ogni pacchetto è **firmato Ed25519**:  prova il codice prima di attivarlo e, 
-se la nuova versione va in crash 3 volteappena avviata, torna da solo alla precedente. Il demone sveglia parte con il codice
+restano quelli della ISO. Ogni pacchetto è **firmato Ed25519**: il tablet accetta solo
+release firmate con la tua chiave privata, solo versioni più nuove, estrae in modo
+sicuro, prova il codice prima di attivarlo e, se la nuova versione va in crash 3 volte
+appena avviata, torna da solo alla precedente. Il demone sveglia parte con il codice
 nuovo solo se si importa senza errori, altrimenti usa quello della ISO.
+
+### Una volta sola
+1. Crea un repository su GitHub (es. `utente/comodino`, pubblico) e carica il progetto
+   (`config.toml`, `secrets/` e `dist/` sono esclusi da git).
+2. Sul PC: `pip install cryptography`, poi `python tools/ota.py chiavi`.
+   - `secrets/ota_privata.pem` → cifrata con passphrase, **mai su GitHub**, fanne un backup offline;
+   - `system/ota.pub` → fai commit e push: va nella ISO e sul tablet.
+3. Primo rilascio (vedi sotto), poi **sul tablet già installato**, da root, una volta:
+   ```bash
+   python3 -c "R='utente/comodino';import urllib.request as u;exec(u.urlopen('https://raw.githubusercontent.com/'+R+'/main/system/bootstrap.py').read())"
+   reboot
+   ```
+   (Le nuove ISO hanno già tutto: basta `[aggiornamenti] repo = "utente/comodino"` in `config.toml`.)
+
+### Ogni rilascio
+```bash
+# 1. alza la versione in comodino/__init__.py (es. 0.9.1), commit e push
+python tools/ota.py pacchetto            # crea dist/comodino-0.9.1.tar.gz e .sig
+gh release create v0.9.1 dist/comodino-0.9.1.tar.gz dist/comodino-0.9.1.tar.gz.sig --notes "Novità…"
+```
+Sul tablet: ⚙️ → ⬆️ Aggiorna → Controlla → Installa, oppure in automatico tra le 3 e le 5
+(mai nell'ora prima di una sveglia). Da lì puoi anche tornare alla versione precedente.
 
 ## Manutenzione
 

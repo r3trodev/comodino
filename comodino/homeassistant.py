@@ -1,5 +1,7 @@
 """Client minimo per l'API REST di Home Assistant."""
 import json
+import re
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -57,6 +59,8 @@ class HomeAssistant:
                     "stato": s.get("state", "?"),
                     "unita": a.get("unit_of_measurement", ""),
                     "attivabile": dom in ATTIVABILI,
+                    # last_reported cambia a ogni lettura anche se il valore è uguale (HA 2024.3+)
+                    "aggiornato": s.get("last_reported") or s.get("last_updated") or "",
                 })
             except Exception:
                 out.append({"id": eid, "nome": eid, "stato": "?", "unita": "", "attivabile": False})
@@ -88,3 +92,68 @@ class HomeAssistant:
 
     def evento(self, tipo, dati):
         self._req("POST", f"/api/events/{tipo}", dati)
+
+
+# ---------------------------------------------------------------- sensori di temperatura
+
+VECCHIO_DOPO_MIN = 60        # nessuna lettura da più di un'ora: il sensore non trasmette
+
+
+def entita_clima(c):
+    """{chiave: entity_id} dei sensori da leggere. La pila del termometro di fuori, se non
+    indicata, si ricava dal sensore di temperatura (RFLink: sensor.xiron_0801_temp -> _bat)."""
+    ids = {k: v for k, v in c.items() if v and k in (
+        "interno_temp", "interno_umidita", "esterno_temp", "esterno_umidita", "esterno_batteria")}
+    if not ids.get("esterno_batteria"):
+        m = re.fullmatch(r"(sensor\.[\w]+)_temp", ids.get("esterno_temp", ""))
+        if m:
+            ids["esterno_batteria"] = m.group(1) + "_bat"
+    return ids
+
+
+def pila_scarica(stato):
+    s = str(stato).strip().lower()
+    if s in ("low", "on", "true", "scarica"):
+        return True
+    try:
+        return float(s) <= 15
+    except ValueError:
+        return False
+
+
+def _eta_min(quando, adesso):
+    try:
+        t = datetime.fromisoformat(quando.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+    return (adesso - t).total_seconds() / 60
+
+
+def clima_da_stati(c, stati, adesso=None):
+    """{'interno': {temp, umidita}, 'esterno': {temp, umidita, pila_scarica?, vecchio?}}."""
+    adesso = adesso or datetime.now(timezone.utc)
+    ids = entita_clima(c)
+    per_id = {s["id"]: s for s in stati}
+    out = {}
+    for luogo in ("interno", "esterno"):
+        val = {}
+        for grandezza in ("temp", "umidita"):
+            s = per_id.get(ids.get(f"{luogo}_{grandezza}"))
+            if not s:
+                continue
+            try:
+                v = float(s["stato"])
+            except (TypeError, ValueError):
+                continue
+            eta = _eta_min(s.get("aggiornato"), adesso)
+            if eta is not None and eta > VECCHIO_DOPO_MIN:
+                val["vecchio"] = True
+                continue
+            val[grandezza] = round(v, 1) if grandezza == "temp" else round(v)
+        if luogo == "esterno":
+            b = per_id.get(ids.get("esterno_batteria"))
+            if b and pila_scarica(b["stato"]):
+                val["pila_scarica"] = True
+        if val:
+            out[luogo] = val
+    return out
