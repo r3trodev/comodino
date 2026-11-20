@@ -98,6 +98,17 @@ Se il sensore non trasmette da più di un'ora si torna alla previsione. La pila 
 si trova da sola per RFLink (`sensor.xxx_temp` → `sensor.xxx_bat`), oppure si indica a mano;
 quando è scarica compare «cambia la pila del termometro».
 
+### Muffa, grafico, terremoti
+- **Rischio muffa** (serve il termometro dentro): stima la temperatura dell'angolo più freddo
+  del muro (fattore fRsi, UNI EN ISO 13788, scelto in «Da PC» come isolamento scarso/medio/buono)
+  e l'umidità che l'aria della stanza avrebbe lì: sotto 70% ok, 70–80% arieggia, oltre 80%
+  rischio muffa, 100% condensa. Con rischio o condensa compare un avviso (solo di giorno).
+- **Grafico 24 ore** nel layout Stazione: un punto ogni 10 minuti, salvato in
+  `~/.local/state/comodino/storico.json` (fuori: termometro se c'è, altrimenti il modello).
+- **Terremoti** dall'INGV (servizio FDSN pubblico): eventi nel raggio e sopra la magnitudo
+  scelti in «Da PC» (predefiniti 100 km, M3.0, avviso per 12 ore). In rosso se M≥4.5,
+  o M≥3.5 entro 50 km.
+
 ### Layout Stazione
 Tre colonne più una barra: ora con cifre a 7 segmenti, meteo attuale e max/min, **Fuori/Dentro**
 (sensori di Home Assistant, impostabili da «Da PC»; senza sensore esterno si usa Open-Meteo),

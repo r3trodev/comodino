@@ -33,6 +33,7 @@ def campi_modificabili(cfg):
         "ha_anticipo_min": ha["anticipo_min"],
         "luogo": cfg["luogo"],
         "clima": cfg["clima"],
+        "terremoti": cfg["terremoti"],
         "agg_repo": cfg["aggiornamenti"]["repo"],
         "ha_sveglia_ora": cfg["homeassistant"]["sveglia_ora"],
         "ha_sveglia_attiva": cfg["homeassistant"]["sveglia_attiva"],
@@ -105,7 +106,25 @@ def valida(data, attuale=None):
             if v and ("." not in v or " " in v):
                 raise ValueError(f"sensore non valido: {v}")
             cl[k] = v
+        if "fattore_muro" in data["clima"]:
+            try:
+                f = float(data["clima"]["fattore_muro"])
+            except (TypeError, ValueError):
+                raise ValueError("isolamento dei muri non valido")
+            if not 0.4 <= f <= 0.95:
+                raise ValueError("isolamento dei muri non valido")
+            cl["fattore_muro"] = f
         out["clima"] = cl
+    if "terremoti" in data:
+        t = data["terremoti"]
+        try:
+            tr = {"attivi": bool(t.get("attivi", True)), "raggio_km": int(t["raggio_km"]),
+                  "magnitudo_min": round(float(t["magnitudo_min"]), 1), "ore": int(t.get("ore", 12))}
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("impostazioni terremoti non valide")
+        if not (10 <= tr["raggio_km"] <= 500 and 1.0 <= tr["magnitudo_min"] <= 7.0 and 1 <= tr["ore"] <= 72):
+            raise ValueError("terremoti: raggio 10–500 km, magnitudo 1–7, ore 1–72")
+        out["terremoti"] = tr
     agg = {}
     if "agg_repo" in data:
         r = data["agg_repo"].strip()
@@ -237,7 +256,7 @@ STILE = """<style>
 body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;max-width:760px;margin:40px auto;padding:0 16px}
 h1{font-weight:600}h2{margin-top:32px;font-size:1.1em;color:#58a6ff}
 label{display:block;margin:14px 0 6px;color:#8b949e}
-input,textarea{width:100%;box-sizing:border-box;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:10px;font:inherit}
+input,textarea,select{width:100%;box-sizing:border-box;background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:10px;font:inherit}
 textarea{min-height:90px;font-family:ui-monospace,monospace;font-size:.9em}
 button{margin-top:24px;background:#238636;color:#fff;border:0;border-radius:8px;padding:12px 28px;font:inherit;cursor:pointer}
 .hint{font-size:.85em;color:#8b949e}.err{color:#f85149}.ok{color:#3fb950}
@@ -271,6 +290,14 @@ PAGINA = f"""<!doctype html><html lang=it><meta charset=utf-8><meta name=viewpor
 <label>Temperatura fuori</label><input id=et placeholder="sensor.balcone_temperatura">
 <label>Umidità fuori</label><input id=eu placeholder="sensor.balcone_umidita">
 <label>Pila del termometro fuori <span class=hint>(facoltativo: con RFLink si trova da sola)</span></label><input id=eb placeholder="sensor.xiron_0801_bat">
+<label>Isolamento dei muri (per il rischio muffa)</label>
+<select id=fm><option value=0.55>Scarso (casa vecchia, muri freddi al tatto)</option>
+<option value=0.7>Medio</option><option value=0.8>Buono (cappotto, infissi nuovi)</option></select>
+<h2>🌍 Terremoti (INGV)</h2>
+<label><input id=tqon type=checkbox style="width:auto"> Mostra i terremoti vicini</label>
+<label>Raggio (km)</label><input id=tqkm type=number min=10 max=500>
+<label>Magnitudo minima</label><input id=tqmag type=number min=1 max=7 step=0.1>
+<label>Per quante ore resta l'avviso</label><input id=tqore type=number min=1 max=72>
 <h2>📱 Sveglia dal telefono (helper di Home Assistant)</h2>
 <label>Ora (input_datetime)</label><input id=svora placeholder="input_datetime.sveglia_comodino">
 <label>Attiva (input_boolean, opzionale)</label><input id=svatt placeholder="input_boolean.sveglia_comodino">
@@ -293,6 +320,8 @@ fetch('/api/config').then(r=>r.json()).then(c=>{{
   $('tokstate').textContent=c.ha_token_impostato?'(già impostato)':'(non impostato)';
   $('it').value=c.clima.interno_temp;$('iu').value=c.clima.interno_umidita;
   $('et').value=c.clima.esterno_temp;$('eu').value=c.clima.esterno_umidita;$('eb').value=c.clima.esterno_batteria||'';
+  const f=c.clima.fattore_muro||0.7;$('fm').value=f<0.62?'0.55':(f>0.75?'0.8':'0.7');
+  $('tqon').checked=c.terremoti.attivi;$('tqkm').value=c.terremoti.raggio_km;$('tqmag').value=c.terremoti.magnitudo_min;$('tqore').value=c.terremoti.ore;
   $('repo').value=c.agg_repo;$('svora').value=c.ha_sveglia_ora;$('svatt').value=c.ha_sveglia_attiva;
   $('pxurl').value=c.px_url;$('pxtid').value=c.px_token_id;$('pxsec').textContent=c.px_secret_impostato?'(già impostato)':'';$('aggtok').textContent=c.agg_token_impostato?'(già impostato)':'';
 }});
@@ -300,7 +329,9 @@ function salva(){{
   const d={{ics_urls:righe($('ics').value),ha_url:$('haurl').value,ha_entita:righe($('haent').value),
            ha_anticipo_min:parseInt($('haant').value||'0'),
            clima:{{interno_temp:$('it').value,interno_umidita:$('iu').value,
-                   esterno_temp:$('et').value,esterno_umidita:$('eu').value,esterno_batteria:$('eb').value}},
+                   esterno_temp:$('et').value,esterno_umidita:$('eu').value,esterno_batteria:$('eb').value,fattore_muro:parseFloat($('fm').value)}},
+           terremoti:{{attivi:$('tqon').checked,raggio_km:parseInt($('tqkm').value||'100'),
+                       magnitudo_min:parseFloat($('tqmag').value||'3'),ore:parseInt($('tqore').value||'12')}},
            agg_repo:$('repo').value,ha_sveglia_ora:$('svora').value,ha_sveglia_attiva:$('svatt').value,
            px_url:$('pxurl').value,px_token_id:$('pxtid').value}};
   if($('pxsecret').value)d.px_secret=$('pxsecret').value;

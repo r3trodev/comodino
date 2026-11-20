@@ -1029,3 +1029,81 @@ class TestClimaMisurato(unittest.TestCase):
     def test_web_pila(self):
         out = webconfig.valida({"clima": {"esterno_batteria": "sensor.xiron_0801_bat"}})
         self.assertEqual(out["clima"]["esterno_batteria"], "sensor.xiron_0801_bat")
+
+
+# ---------------------------------------------------------------- v0.9.5: muffa, terremoti, storico
+class TestMuffa(unittest.TestCase):
+    def test_rugiada(self):
+        from comodino import muffa
+        self.assertAlmostEqual(muffa.punto_rugiada(20, 50), 9.3, delta=0.2)
+        self.assertAlmostEqual(muffa.umidita_assoluta(20, 50), 8.6, delta=0.2)
+
+    def test_livelli(self):
+        from comodino import muffa
+        self.assertIsNone(muffa.rischio(None, 50, 10))
+        self.assertEqual(muffa.rischio(21, 45, 12)["livello"], "ok")
+        self.assertEqual(muffa.rischio(20, 65, 5)["livello"], "rischio")
+        r = muffa.rischio(18, 80, 2, fattore=0.55)
+        self.assertEqual(r["livello"], "condensa")
+        self.assertEqual(r["ur_muro"], 100)
+        # d'estate, fuori più caldo: il muro non è più freddo della stanza
+        self.assertEqual(muffa.rischio(26, 60, 32)["livello"], "ok")
+
+
+class TestTerremoti(unittest.TestCase):
+    TESTO = (
+        "#EventID|Time|Latitude|Longitude|Depth/Km|Author|Catalog|Contributor|ContributorID|"
+        "MagType|Magnitude|MagAuthor|EventLocationName|EventType\n"
+        "111|2026-11-20T18:00:00.120000|38.40|14.90|10.2|SURVEY-INGV||||ML|3.1|--|Isole Eolie (Messina)|earthquake\n"
+        "222|2026-11-20T19:30:00|37.90|14.00|8.0|SURVEY-INGV||||ML|3.8|--|2 km N Collesano (PA)|earthquake\n"
+        "rotta|x|y\n")
+
+    def test_parse_e_avviso(self):
+        from comodino import terremoti
+        ora = datetime(2026, 11, 20, 20, 0, tzinfo=timezone.utc)
+        ev = terremoti.parse(self.TESTO, 38.0, 13.95, ora)
+        self.assertEqual([e["id"] for e in ev], ["222", "111"])       # dal più recente
+        self.assertTrue(ev[0]["forte"])                               # 3.8 a ~12 km
+        self.assertFalse(ev[1]["forte"])
+        self.assertEqual(ev[0]["ore_fa"], 0.5)
+        av = terremoti.avviso(ev)
+        self.assertIn("M3.8", av["testo"])
+        self.assertEqual(av["colore"], "#f85149")
+        self.assertIsNone(terremoti.avviso([]))
+        self.assertEqual(terremoti.parse("", 38, 14), [])
+
+    def test_distanza(self):
+        from comodino import terremoti
+        self.assertAlmostEqual(terremoti.distanza_km(38.0, 13.0, 38.0, 14.0), 87.6, delta=1)
+
+
+class TestStorico(unittest.TestCase):
+    def test_punti(self):
+        from comodino.storico import Storico
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "s.json")
+            s = Storico(path)
+            t0 = int(__import__("time").time()) - 26 * 3600
+            self.assertTrue(s.aggiungi(20.1, None, t0))
+            self.assertFalse(s.aggiungi(20.2, None, t0 + 60))          # troppo presto
+            self.assertFalse(s.aggiungi(None, None, t0 + 700))         # niente da salvare
+            self.assertTrue(s.aggiungi(20.3, 21.0, t0 + 600))
+            self.assertTrue(s.aggiungi(19.0, 21.0, t0 + 25 * 3600))    # i vecchi vanno via
+            self.assertEqual(len(s.punti), 1)
+            s2 = Storico(path)
+            s2._pota(t0 + 25 * 3600)
+            self.assertEqual(s2.punti, [{"t": t0 + 25 * 3600, "f": 19.0, "d": 21.0}])
+
+
+class TestWebNuovi(unittest.TestCase):
+    def test_terremoti(self):
+        out = webconfig.valida({"terremoti": {"attivi": True, "raggio_km": "80", "magnitudo_min": "2.5", "ore": 6}})
+        self.assertEqual(out["terremoti"], {"attivi": True, "raggio_km": 80, "magnitudo_min": 2.5, "ore": 6})
+        with self.assertRaises(ValueError):
+            webconfig.valida({"terremoti": {"raggio_km": 5000, "magnitudo_min": 3}})
+
+    def test_fattore_muro(self):
+        out = webconfig.valida({"clima": {"fattore_muro": 0.55}})
+        self.assertEqual(out["clima"]["fattore_muro"], 0.55)
+        with self.assertRaises(ValueError):
+            webconfig.valida({"clima": {"fattore_muro": 2}})

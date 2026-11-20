@@ -53,6 +53,7 @@ DEFAULT = {
         "esterno_temp": "",             # se vuoto: si usa la temperatura di Open-Meteo
         "esterno_umidita": "",
         "esterno_batteria": "",         # pila del termometro; vuoto = ricavata da esterno_temp (RFLink: *_bat)
+        "fattore_muro": 0.7,            # rischio muffa: quanto è isolato l'angolo più freddo (0.5 pessimo, 0.8 buono)
     },
     "batteria": {
         "gestione": True,               # False = solo lettura
@@ -69,6 +70,12 @@ DEFAULT = {
     },
     "allerte": {
         "zona": "",                     # area Meteoalarm (scelta dal pannello: Luogo → Zona allerte)
+    },
+    "terremoti": {                      # INGV, dati pubblici
+        "attivi": True,
+        "raggio_km": 100,
+        "magnitudo_min": 3.0,
+        "ore": 12,                      # per quante ore resta l'avviso
     },
     "proxmox": {
         "url": "",                      # es. "https://192.168.1.5:8006"

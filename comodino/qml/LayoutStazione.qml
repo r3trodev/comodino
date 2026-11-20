@@ -12,6 +12,7 @@ Item {
     property var avvisi: []
     signal apriSveglia()
     signal apriServer()
+    signal apriImpostazioni()
 
     readonly property var m: backend.meteo
     readonly property var aria: m.aria || ({})
@@ -199,7 +200,27 @@ Item {
                             }
                         }
                     }
-                    Item { Layout.fillHeight: true }
+                    // rischio muffa (serve il termometro dentro)
+                    Text {
+                        readonly property var mf: backend.muffa
+                        visible: !!mf.livello
+                        text: !mf.livello ? "" : "🍄 " + st.maiuscola(mf.testo) + " · rugiada " + mf.rugiada + "°"
+                        color: mf.livello === "ok" ? st.tema.tenue
+                             : (mf.livello === "attenzione" ? st.tema.accento : "#f0883e")
+                        font.family: st.mono
+                        font.pixelSize: 24 * st.u
+                    }
+
+                    // grafico delle ultime 24 ore (riempie lo spazio libero)
+                    Grafico24 {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.topMargin: 6 * st.u
+                        Layout.minimumHeight: 90 * st.u
+                        tema: st.tema
+                        u: st.u
+                        punti: backend.storico
+                    }
                     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 2; color: st.linea }
                     // alba e tramonto: icona e ora separate, con margine dal bordo del pannello
                     // (la larghezza delle emoji a colori non sempre viene misurata bene)
@@ -357,9 +378,21 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 120 * st.u      // spazio per il pulsante ⚙️
+                anchors.leftMargin: 8 * st.u
                 anchors.rightMargin: 24 * st.u
                 spacing: 20 * st.u
+
+                Item {    // impostazioni: grande e centrato sul lato sinistro della barra
+                    Layout.preferredWidth: 104 * st.u
+                    Layout.fillHeight: true
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚙️"
+                        font.pixelSize: 66 * st.u
+                    }
+                    MouseArea { anchors.fill: parent; anchors.margins: -8 * st.u; onClicked: st.apriImpostazioni() }
+                }
+                Rectangle { Layout.preferredWidth: 2; Layout.preferredHeight: 50 * st.u; color: st.tema.sfondo; opacity: 0.4 }
 
                 Text {    // sveglia: tocca per impostarla
                     text: st.testoSveglia

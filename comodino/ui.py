@@ -24,7 +24,9 @@ from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot  # 
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 
-from . import allerte, config, geocode, homeassistant, icsparse, luna, ota, proxmox, sistema, weather  # noqa: E402
+from . import (allerte, config, geocode, homeassistant, icsparse, luna, muffa, ota, proxmox,  # noqa: E402
+               sistema, terremoti, weather)
+from .storico import Storico  # noqa: E402
 from .luminosita import Backlight  # noqa: E402
 from .homeassistant import HomeAssistant  # noqa: E402
 from .webconfig import WebConfig  # noqa: E402
@@ -59,6 +61,10 @@ class Backend(QObject):
     albaChanged = Signal()
     _allertePronte = Signal(object)
     _serverPronto = Signal(object)
+    terremotiChanged = Signal()
+    _terremotiPronti = Signal(object)
+    storicoChanged = Signal()
+    muffaChanged = Signal()
 
     def __init__(self, cfg):
         super().__init__()
@@ -74,12 +80,15 @@ class Backend(QObject):
         self._errore = ""
         self._awake_until = 0.0
         self.backlight = Backlight(cfg["schermo"]["retroilluminazione"])
-        self._wake = {k: threading.Event() for k in ("meteo", "agenda", "ha", "allerte", "server")}
+        self._wake = {k: threading.Event() for k in ("meteo", "agenda", "ha", "allerte", "server", "terremoti")}
         self._allerte = []
         self._server = {"configurato": False}
         self._vm_prima = []
         self._alba = -1.0
         self._alba_nascosta = None
+        self._terremoti = {"eventi": [], "avviso": None}
+        self._muffa = {}
+        self._storico = Storico(str(config.state_dir() / "storico.json"))
 
         self._meteoPronto.connect(self._set_meteo)
         self._agendaPronta.connect(self._set_agenda)
@@ -87,17 +96,21 @@ class Backend(QObject):
         self._climaPronto.connect(self._set_clima)
         self._allertePronte.connect(self._set_allerte)
         self._serverPronto.connect(self._set_server)
+        self._terremotiPronti.connect(self._set_terremoti)
         self._webStato.connect(self.webChanged)
         self._webSalvato.connect(self._ricarica)     # dal thread del server web al thread principale
         self.web = WebConfig(on_saved=self._salvato_da_web, on_state=self._webStato.emit)
 
-        for target in (self._loop_meteo, self._loop_agenda, self._loop_ha, self._loop_allerte, self._loop_server):
+        for target in (self._loop_meteo, self._loop_agenda, self._loop_ha, self._loop_allerte, self._loop_server,
+                       self._loop_terremoti):
             threading.Thread(target=target, daemon=True).start()
 
         self._t_alarm = QTimer(self, interval=1000, timeout=self._poll_alarm)
         self._t_alarm.start()
         self._t_screen = QTimer(self, interval=5000, timeout=self._update_screen)
         self._t_screen.start()
+        self._t_storico = QTimer(self, interval=60 * 1000, timeout=self._registra)
+        self._t_storico.start()
 
         self._ota = {"stato": "", "errore": "", "disponibile": None, "occupato": False,
                      "ultimo_controllo": 0.0}
@@ -184,6 +197,18 @@ class Backend(QObject):
     @Property(str, notify=configChanged)
     def citta(self):
         return self.cfg["luogo"]["nome"]
+
+    @Property("QVariantMap", notify=terremotiChanged)
+    def terremoti(self):
+        return self._terremoti
+
+    @Property("QVariantList", notify=storicoChanged)
+    def storico(self):
+        return self._storico.punti
+
+    @Property("QVariantMap", notify=muffaChanged)
+    def muffa(self):
+        return self._muffa
 
     @Property("QVariantList", notify=allerteChanged)
     def allerte(self):
@@ -272,6 +297,48 @@ class Backend(QObject):
     def _set_meteo(self, data):
         self._meteo = data
         self.meteoChanged.emit()
+        self._aggiorna_muffa()
+
+    def _temp_fuori(self):
+        """Temperatura di fuori: il termometro se c'è, altrimenti il modello."""
+        e = self._clima.get("esterno") or {}
+        return e.get("temp", self._meteo.get("temp_decimale"))
+
+    def _aggiorna_muffa(self):
+        i = self._clima.get("interno") or {}
+        r = muffa.rischio(i.get("temp"), i.get("umidita"), self._temp_fuori(),
+                          float(self.cfg["clima"].get("fattore_muro", 0.7))) or {}
+        if r != self._muffa:
+            self._muffa = r
+            self.muffaChanged.emit()
+
+    @Slot()
+    def _registra(self):
+        i = self._clima.get("interno") or {}
+        if self._storico.aggiungi(self._temp_fuori(), i.get("temp")):
+            self.storicoChanged.emit()
+
+    def _loop_terremoti(self):
+        while True:
+            t, l = self.cfg["terremoti"], self.cfg["luogo"]
+            attesa = 5 * 60
+            if t["attivi"]:
+                try:
+                    testo = terremoti.fetch(l["lat"], l["lon"], t["raggio_km"], t["magnitudo_min"], t["ore"])
+                    self._terremotiPronti.emit(terremoti.parse(testo, l["lat"], l["lon"]))
+                except Exception as e:
+                    print("terremoti:", e, file=sys.stderr)
+                    attesa = 2 * 60
+            else:
+                self._terremotiPronti.emit([])
+            self._sleep("terremoti", attesa)
+
+    @Slot(object)
+    def _set_terremoti(self, eventi):
+        dati = {"eventi": eventi, "avviso": terremoti.avviso(eventi)}
+        if dati != self._terremoti:
+            self._terremoti = dati
+            self.terremotiChanged.emit()
 
     @Slot(object, object)
     def _set_agenda(self, rows, errors):
@@ -349,6 +416,7 @@ class Backend(QObject):
         if data != self._clima:
             self._clima = data
             self.climaChanged.emit()
+            self._aggiorna_muffa()
 
     @Slot(object)
     def _set_ha(self, data):
@@ -486,7 +554,8 @@ class Backend(QObject):
                    "agenda": ("calendario", "luogo"),
                    "ha": ("homeassistant", "clima"),
                    "allerte": ("allerte",),
-                   "server": ("proxmox",)}
+                   "server": ("proxmox",),
+                   "terremoti": ("terremoti", "luogo")}
 
     @Slot()
     def _ricarica(self):

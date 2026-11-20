@@ -68,12 +68,18 @@ ApplicationWindow {
         return icona + "  " + quando + Qt.formatTime(p, "HH:mm") + (s.prossima_nome ? "   ·   " + s.prossima_nome : "")
     }
 
-    // Avvisi importanti: allerte meteo (visibili anche di notte)
+    // Avvisi importanti: terremoti forti, allerte meteo (visibili anche di notte), muffa (solo di giorno)
     readonly property var avvisi: {
         var out = []
+        var tq = backend.terremoti.avviso
+        if (tq && tq.forte) out.push({ testo: tq.testo, colore: tq.colore })
         var a = backend.allerte
         for (var i = 0; i < a.length; i++)
             out.push({ testo: "⚠️ " + a[i].testo + (a[i].alle ? " (fino a " + a[i].alle + ")" : ""), colore: a[i].colore })
+        if (tq && !tq.forte) out.push({ testo: tq.testo, colore: tq.colore })
+        var mf = backend.muffa
+        if (!win.notte && (mf.livello === "rischio" || mf.livello === "condensa"))
+            out.push({ testo: "🍄 Camera: " + mf.testo + " (muro " + mf.ur_muro + "%)", colore: "#d29922" })
         return out
     }
 
@@ -113,6 +119,7 @@ ApplicationWindow {
             avvisi: win.avvisi
             onApriSveglia: dialogSveglia.apri()
             onApriServer: impostazioni.apriScheda(7)
+            onApriImpostazioni: impostazioni.apri()
         }
 
         RowLayout {
@@ -561,18 +568,19 @@ ApplicationWindow {
             }
         }
 
-        // Pulsante impostazioni (in basso a sinistra)
+        // Pulsante impostazioni (in basso a sinistra). Nel layout Stazione sta dentro la barra.
         Rectangle {
             z: 50
+            visible: !win.stazione || win.notte
             anchors.bottom: parent.bottom
             anchors.left: parent.left
-            anchors.margins: 18 * win.u
-            width: 96 * win.u
+            anchors.margins: 14 * win.u
+            width: 124 * win.u
             height: width
             radius: width / 2
             color: "transparent"
-            opacity: win.notte ? 0.25 : 0.7
-            Text { anchors.centerIn: parent; text: "⚙️"; font.pixelSize: 54 * win.u }
+            opacity: win.notte ? 0.25 : 0.8
+            Text { anchors.centerIn: parent; text: "⚙️"; font.pixelSize: 74 * win.u }
             MouseArea { anchors.fill: parent; onClicked: impostazioni.apri() }
         }
 
