@@ -13,6 +13,7 @@ Item {
     signal apriSveglia()
     signal apriServer()
     signal apriImpostazioni()
+    signal apriAvvisi()
 
     readonly property var m: backend.meteo
     readonly property var aria: m.aria || ({})
@@ -70,6 +71,11 @@ Item {
                 font.family: st.mono
                 font.pixelSize: 28 * st.u
                 font.weight: Font.DemiBold
+                MouseArea {   // tocca per vederli tutti
+                    anchors.fill: parent
+                    anchors.margins: -16 * st.u
+                    onClicked: st.apriAvvisi()
+                }
             }
             Item { Layout.fillWidth: true }
             Text {

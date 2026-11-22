@@ -123,6 +123,7 @@ ApplicationWindow {
             onApriSveglia: dialogSveglia.apri()
             onApriServer: impostazioni.apriScheda(7)
             onApriImpostazioni: impostazioni.apri()
+            onApriAvvisi: elencoAvvisi.apri()
         }
 
         RowLayout {
@@ -212,6 +213,7 @@ ApplicationWindow {
                             color: win.notte ? temaApp.testo : parent.modelData.colore
                             font.pixelSize: 26 * win.u
                         }
+                        MouseArea { anchors.fill: parent; onClicked: elencoAvvisi.apri() }
                     }
                 }
             }
@@ -514,6 +516,7 @@ ApplicationWindow {
         }
 
         AlarmDialog { id: dialogSveglia; anchors.fill: parent; z: 500; tema: temaApp; u: win.u }
+        Avvisi { id: elencoAvvisi; anchors.fill: parent; z: 500; tema: temaApp; u: win.u; avvisi: win.avvisi }
 
         Alba {
             anchors.fill: parent
