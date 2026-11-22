@@ -77,6 +77,9 @@ ApplicationWindow {
         for (var i = 0; i < a.length; i++)
             out.push({ testo: "⚠️ " + a[i].testo + (a[i].alle ? " (fino a " + a[i].alle + ")" : ""), colore: a[i].colore })
         if (tq && !tq.forte) out.push({ testo: tq.testo, colore: tq.colore })
+        var est = backend.clima.esterno || {}
+        if (!win.notte && est.pila_scarica)
+            out.push({ testo: "🪫 Cambia la pila del termometro di fuori", colore: "#d29922" })
         var mf = backend.muffa
         if (!win.notte && (mf.livello === "rischio" || mf.livello === "condensa"))
             out.push({ testo: "🍄 Camera: " + mf.testo + " (muro " + mf.ur_muro + "%)", colore: "#d29922" })
@@ -306,12 +309,7 @@ ApplicationWindow {
                                     color: temaApp.tenue
                                     font.pixelSize: 26 * win.u
                                 }
-                                Text {
-                                    visible: !!cardMeteo.est.pila_scarica
-                                    text: "🪫 cambia la pila del termometro"
-                                    color: "#f0883e"
-                                    font.pixelSize: 26 * win.u
-                                }
+
                                 Text {
                                     text: cardMeteo.m.descrizione || "Caricamento meteo…"
                                     color: temaApp.tenue

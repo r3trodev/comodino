@@ -1,2 +1,2 @@
 """Comodino: stazione meteo, sveglia e calendario per tablet."""
-__version__ = "0.9.6"
+__version__ = "0.9.7"

@@ -48,6 +48,7 @@ Item {
         // ------------------------------------------------ intestazione
         RowLayout {
             Layout.fillWidth: true
+            Layout.maximumWidth: st.width
             spacing: 26 * st.u
             Text {
                 text: "📍 " + backend.citta + "   ⟳ " + (st.m.aggiornato || "--:--")
@@ -58,6 +59,10 @@ Item {
             Item { Layout.fillWidth: true }
             Text {
                 readonly property var av: st.avvisi
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
                 visible: av.length > 0 || !!st.m.pioggia_imminente
                 text: av.length ? av[0].testo + (av.length > 1 ? "  (+" + (av.length - 1) + ")" : "")
                                 : "🌧 " + st.m.pioggia_imminente
@@ -78,9 +83,13 @@ Item {
         }
 
         RowLayout {
+            id: colonne
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: st.width
             spacing: 22 * st.u
+            readonly property real utile: st.width - 2 * spacing
 
             // ============================================ colonna 1: ora e clima
             Rectangle {   // pannello
@@ -89,8 +98,11 @@ Item {
                 border.width: 2
                 border.color: st.bordo
                 Layout.fillHeight: true
-                Layout.fillWidth: true
-                Layout.preferredWidth: 34
+                Layout.minimumHeight: 0
+                Layout.minimumWidth: colonne.utile * 0.34
+                Layout.maximumWidth: colonne.utile * 0.34
+                Layout.preferredWidth: colonne.utile * 0.34
+                clip: true      // il contenuto non deve mai allargare la colonna
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -109,7 +121,8 @@ Item {
                         text: Qt.formatTime(st.adesso, "HH:mm")
                         color: st.tema.testo
                         font.family: st.lcd
-                        font.pixelSize: 170 * st.u
+                        Layout.minimumWidth: 0
+                        font.pixelSize: 150 * st.u
                         fontSizeMode: Text.HorizontalFit     // non esce mai dal pannello
                         minimumPixelSize: 60 * st.u
                     }
@@ -141,7 +154,7 @@ Item {
                                                : { temp: st.m.temp_decimale, umidita: st.m.umidita },
                                 nota: misurata ? "misurata" : (e.vecchio ? "termometro muto · previsione" : "previsione"),
                                 extra: misurata && st.m.temp_decimale !== undefined ? "modello " + st.m.temp_decimale + "°" : "",
-                                avviso: e.pila_scarica ? "🪫 cambia la pila del termometro" : ""
+                                avviso: ""      // la pila scarica compare tra gli avvisi in alto
                             }
                             var dentro = {
                                 nome: "Dentro",
@@ -182,14 +195,14 @@ Item {
                                     text: "🌡 " + st.nd(riga.modelData.dati.temp, "°")
                                     color: st.tema.testo
                                     font.family: st.mono
-                                    font.pixelSize: 64 * st.u
+                                    font.pixelSize: 56 * st.u
                                     font.weight: Font.DemiBold
                                 }
                                 Text {
                                     text: "💧 " + st.nd(riga.modelData.dati.umidita, "%")
                                     color: st.tema.testo
                                     font.family: st.mono
-                                    font.pixelSize: 64 * st.u
+                                    font.pixelSize: 56 * st.u
                                 }
                             }
                             Text {
@@ -217,7 +230,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.topMargin: 6 * st.u
-                        Layout.minimumHeight: 90 * st.u
+                        Layout.minimumHeight: 60 * st.u
                         tema: st.tema
                         u: st.u
                         punti: backend.storico
@@ -233,27 +246,22 @@ Item {
                         Text { text: "🌅"; font.family: st.emoji; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
                         Text { text: st.m.alba || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                         Item { Layout.fillWidth: true }
-                        Text { text: "🌇"; font.family: st.emoji; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
-                        Text { text: st.m.tramonto || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 14 * st.u
-                        Layout.rightMargin: 24 * st.u
-                        visible: !!st.m.luna
-                        spacing: 12 * st.u
-                        Text {
+                        Text {   // fase lunare al centro: icona e percentuale
+                            visible: !!st.m.luna
                             text: st.m.luna ? st.m.luna.icona : ""
                             font.family: st.emoji
-                            font.pixelSize: 28 * st.u
-                            Layout.preferredWidth: 44 * st.u
+                            font.pixelSize: 30 * st.u
                         }
                         Text {
-                            text: st.m.luna ? st.m.luna.nome + " · " + st.m.luna.illuminazione + "%" : ""
+                            visible: !!st.m.luna
+                            text: st.m.luna ? st.m.luna.illuminazione + "%" : ""
                             color: st.tema.tenue
                             font.family: st.mono
                             font.pixelSize: 26 * st.u
                         }
+                        Item { Layout.fillWidth: true }
+                        Text { text: "🌇"; font.family: st.emoji; font.pixelSize: 32 * st.u; Layout.preferredWidth: 44 * st.u }
+                        Text { text: st.m.tramonto || "--:--"; color: st.tema.testo; font.family: st.mono; font.pixelSize: 32 * st.u }
                     }
                 }
             }
@@ -265,8 +273,11 @@ Item {
                 border.width: 2
                 border.color: st.bordo
                 Layout.fillHeight: true
-                Layout.fillWidth: true
-                Layout.preferredWidth: 35
+                Layout.minimumHeight: 0
+                Layout.minimumWidth: colonne.utile * 0.35
+                Layout.maximumWidth: colonne.utile * 0.35
+                Layout.preferredWidth: colonne.utile * 0.35
+                clip: true      // il contenuto non deve mai allargare la colonna
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -323,8 +334,11 @@ Item {
                 border.width: 2
                 border.color: st.bordo
                 Layout.fillHeight: true
-                Layout.fillWidth: true
-                Layout.preferredWidth: 31
+                Layout.minimumHeight: 0
+                Layout.minimumWidth: colonne.utile * 0.31
+                Layout.maximumWidth: colonne.utile * 0.31
+                Layout.preferredWidth: colonne.utile * 0.31
+                clip: true      // il contenuto non deve mai allargare la colonna
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -380,9 +394,12 @@ Item {
         // ------------------------------------------------ barra in basso
         Rectangle {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: st.width
             Layout.preferredHeight: 96 * st.u
             radius: 18 * st.u
             color: st.tema.testo
+            clip: true
 
             RowLayout {
                 anchors.fill: parent
