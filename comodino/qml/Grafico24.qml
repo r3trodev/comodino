@@ -8,6 +8,12 @@ Item {
     property real u: 1
     property var punti: []
 
+    // colori fissi e ben distinti, indipendenti dal tema (sul tema OLED testo e accento sono
+    // entrambi bianchi): arancio = fuori, azzurro = dentro; più scuri sui temi chiari
+    readonly property bool chiaro: tema.sfondo.hslLightness > 0.5
+    readonly property color coloreFuori: chiaro ? "#c4510a" : "#ff9a3c"
+    readonly property color coloreDentro: chiaro ? "#1f6feb" : "#4cc2ff"
+
     readonly property bool haDentro: {
         for (var i = 0; i < punti.length; i++) if (punti[i].d !== null && punti[i].d !== undefined) return true
         return false
@@ -16,6 +22,7 @@ Item {
 
     onPuntiChanged: tela.requestPaint()
     onTemaChanged: tela.requestPaint()
+    onChiaroChanged: tela.requestPaint()
 
     Row {   // legenda
         id: legenda
@@ -23,8 +30,8 @@ Item {
         anchors.left: parent.left
         spacing: 22 * g.u
         Text { text: "Ultime 24 ore"; color: g.tema.tenue; font.family: "DejaVu Sans Mono"; font.pixelSize: 22 * g.u }
-        Text { text: "━ fuori"; color: g.tema.accento; font.family: "DejaVu Sans Mono"; font.pixelSize: 22 * g.u }
-        Text { visible: g.haDentro; text: "━ dentro"; color: g.tema.testo; font.family: "DejaVu Sans Mono"; font.pixelSize: 22 * g.u }
+        Text { text: "━ fuori"; color: g.coloreFuori; font.family: "DejaVu Sans Mono"; font.pixelSize: 22 * g.u }
+        Text { visible: g.haDentro; text: "━ dentro"; color: g.coloreDentro; font.family: "DejaVu Sans Mono"; font.pixelSize: 22 * g.u }
     }
 
     Text {
@@ -73,9 +80,10 @@ Item {
             var fs = Math.round(20 * g.u)
             var sx = 58 * g.u                 // spazio per le etichette dei gradi
             var basso = height - fs - 8 * g.u // spazio per le ore
+            var alto = fs / 2 + 2 * g.u       // spazio perché l'etichetta più alta non venga tagliata
             var w = width - sx
             function X(t) { return sx + (t - inizio) / (24 * 3600) * w }
-            function Y(v) { return basso - (v - lo) / (hi - lo) * (basso - 4 * g.u) }
+            function Y(v) { return basso - (v - lo) / (hi - lo) * (basso - alto) }
 
             // griglia e etichette
             ctx.font = fs + "px 'DejaVu Sans Mono'"
@@ -118,8 +126,8 @@ Item {
                 }
                 ctx.stroke()
             }
-            linea("f", g.tema.accento)
-            if (g.haDentro) linea("d", g.tema.testo)
+            linea("f", g.coloreFuori)
+            if (g.haDentro) linea("d", g.coloreDentro)
         }
     }
 
