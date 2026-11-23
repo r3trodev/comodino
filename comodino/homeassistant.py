@@ -51,7 +51,12 @@ class HomeAssistant:
         for eid in entity_ids:
             dom = eid.split(".", 1)[0]
             try:
-                s = self._req("GET", "/api/states/" + urllib.parse.quote(eid))
+                try:
+                    s = self._req("GET", "/api/states/" + urllib.parse.quote(eid))
+                except Exception as e:      # HA lento o occupato (es. poca RAM): riprova una volta
+                    if "(401)" in str(e) or "(404)" in str(e):
+                        raise
+                    s = self._req("GET", "/api/states/" + urllib.parse.quote(eid), timeout=15)
                 a = s.get("attributes", {})
                 out.append({
                     "id": eid,
@@ -59,7 +64,6 @@ class HomeAssistant:
                     "stato": s.get("state", "?"),
                     "unita": a.get("unit_of_measurement", ""),
                     "attivabile": dom in ATTIVABILI,
-                    # last_reported cambia a ogni lettura anche se il valore è uguale (HA 2024.3+)
                     # last_reported cambia a ogni lettura; last_updated solo se il valore cambia
                     "riportato": s.get("last_reported") or "",
                     "aggiornato": s.get("last_updated") or "",
@@ -182,3 +186,20 @@ def clima_da_stati(c, stati, adesso=None):
         if val:
             out[luogo] = val
     return out
+
+
+TIENI_ULTIMA_S = 15 * 60     # se HA non risponde per un momento, si tiene l'ultima lettura buona
+
+
+def unisci_clima(nuovo, visti, adesso):
+    """Copre i "buchi" dovuti a HA che non risponde: per ogni luogo assente nella lettura
+    nuova si riusa l'ultima lettura buona, se ha meno di 15 minuti. Un termometro dichiarato
+    "vecchio" (muto davvero) non viene coperto. Restituisce (dati, visti aggiornati)."""
+    dati, visti = dict(nuovo), dict(visti)
+    for luogo in ("interno", "esterno"):
+        v = dati.get(luogo)
+        if v and not v.get("vecchio") and v.get("temp") is not None:
+            visti[luogo] = (adesso, v)
+        elif not v and luogo in visti and adesso - visti[luogo][0] < TIENI_ULTIMA_S:
+            dati[luogo] = visti[luogo][1]
+    return dati, visti

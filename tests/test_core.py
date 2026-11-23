@@ -1118,3 +1118,21 @@ class TestWebNuovi(unittest.TestCase):
         self.assertEqual(out["clima"]["fattore_muro"], 0.55)
         with self.assertRaises(ValueError):
             webconfig.valida({"clima": {"fattore_muro": 2}})
+
+
+class TestUnisciClima(unittest.TestCase):
+    def test_buco_coperto(self):
+        from comodino.homeassistant import unisci_clima
+        buono = {"interno": {"temp": 22.1, "umidita": 61}, "esterno": {"temp": 19.4}}
+        d, v = unisci_clima(buono, {}, 1000)
+        self.assertEqual(d, buono)
+        # HA non risponde per l'interno: si tiene l'ultima lettura
+        d, v = unisci_clima({"esterno": {"temp": 19.3}}, v, 1300)
+        self.assertEqual(d["interno"], {"temp": 22.1, "umidita": 61})
+        self.assertEqual(d["esterno"], {"temp": 19.3})
+        # dopo 15 minuti senza letture no
+        d, _ = unisci_clima({}, v, 1000 + 16 * 60)
+        self.assertNotIn("interno", d)
+        # muto davvero: non si copre
+        d, _ = unisci_clima({"interno": {"vecchio": True}}, v, 1100)
+        self.assertEqual(d["interno"], {"vecchio": True})

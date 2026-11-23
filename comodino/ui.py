@@ -87,6 +87,7 @@ class Backend(QObject):
         self._alba = -1.0
         self._alba_nascosta = None
         self._terremoti = {"eventi": [], "avviso": None}
+        self._clima_visti = {}
         self._muffa = {}
         self._storico = Storico(str(config.state_dir() / "storico.json"))
 
@@ -413,6 +414,7 @@ class Backend(QObject):
 
     @Slot(object)
     def _set_clima(self, data):
+        data, self._clima_visti = homeassistant.unisci_clima(data, self._clima_visti, time.monotonic())
         if data != self._clima:
             self._clima = data
             self.climaChanged.emit()
