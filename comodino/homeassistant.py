@@ -60,7 +60,9 @@ class HomeAssistant:
                     "unita": a.get("unit_of_measurement", ""),
                     "attivabile": dom in ATTIVABILI,
                     # last_reported cambia a ogni lettura anche se il valore è uguale (HA 2024.3+)
-                    "aggiornato": s.get("last_reported") or s.get("last_updated") or "",
+                    # last_reported cambia a ogni lettura; last_updated solo se il valore cambia
+                    "riportato": s.get("last_reported") or "",
+                    "aggiornato": s.get("last_updated") or "",
                 })
             except Exception:
                 out.append({"id": eid, "nome": eid, "stato": "?", "unita": "", "attivabile": False})
@@ -97,6 +99,7 @@ class HomeAssistant:
 # ---------------------------------------------------------------- sensori di temperatura
 
 VECCHIO_DOPO_MIN = 60        # nessuna lettura da più di un'ora: il sensore non trasmette
+VECCHIO_SENZA_REPORT_MIN = 6 * 60   # HA senza last_reported: si sa solo quando il valore è cambiato
 
 
 def entita_clima(c):
@@ -129,13 +132,39 @@ def _eta_min(quando, adesso):
     return (adesso - t).total_seconds() / 60
 
 
+def _eta_sensore(s, adesso):
+    """(minuti dall'ultima lettura, affidabile?). Con last_reported l'età è precisa; con il solo
+    last_updated è un limite superiore (un valore fermo non lo aggiorna)."""
+    eta = _eta_min(s.get("riportato"), adesso)
+    if eta is not None:
+        return eta, True
+    return _eta_min(s.get("aggiornato"), adesso), False
+
+
 def clima_da_stati(c, stati, adesso=None):
-    """{'interno': {temp, umidita}, 'esterno': {temp, umidita, pila_scarica?, vecchio?}}."""
+    """{'interno': {temp, umidita}, 'esterno': {temp, umidita, pila_scarica?, vecchio?}}.
+
+    Un termometro è "muto" solo se NESSUNO dei suoi sensori (temperatura, umidità, pila) ha
+    dato segni di vita di recente: temperatura e umidità arrivano nello stesso pacchetto, e una
+    temperatura ferma per ore non deve far sembrare spento il termometro.
+    """
     adesso = adesso or datetime.now(timezone.utc)
     ids = entita_clima(c)
     per_id = {s["id"]: s for s in stati}
     out = {}
     for luogo in ("interno", "esterno"):
+        chiavi = [f"{luogo}_temp", f"{luogo}_umidita"] + (["esterno_batteria"] if luogo == "esterno" else [])
+        sensori = [per_id[ids[k]] for k in chiavi if ids.get(k) in per_id]
+        ultime, preciso = [], False
+        for s in sensori:
+            eta, affidabile = _eta_sensore(s, adesso)
+            if eta is not None:
+                ultime.append(eta)
+                preciso = preciso or affidabile
+        limite = VECCHIO_DOPO_MIN if preciso else VECCHIO_SENZA_REPORT_MIN
+        if ultime and min(ultime) > limite:
+            out[luogo] = {"vecchio": True}
+            continue
         val = {}
         for grandezza in ("temp", "umidita"):
             s = per_id.get(ids.get(f"{luogo}_{grandezza}"))
@@ -144,10 +173,6 @@ def clima_da_stati(c, stati, adesso=None):
             try:
                 v = float(s["stato"])
             except (TypeError, ValueError):
-                continue
-            eta = _eta_min(s.get("aggiornato"), adesso)
-            if eta is not None and eta > VECCHIO_DOPO_MIN:
-                val["vecchio"] = True
                 continue
             val[grandezza] = round(v, 1) if grandezza == "temp" else round(v)
         if luogo == "esterno":

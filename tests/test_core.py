@@ -997,7 +997,7 @@ class TestClimaMisurato(unittest.TestCase):
 
     def _s(self, eid, stato, minuti_fa=1):
         t = (self.ora - timedelta(minutes=minuti_fa)).isoformat()
-        return {"id": eid, "stato": stato, "aggiornato": t}
+        return {"id": eid, "stato": stato, "riportato": t, "aggiornato": t}
 
     def test_pila_ricavata_da_rflink(self):
         self.assertEqual(self.ha.entita_clima(self.c)["esterno_batteria"], "sensor.xiron_0801_bat")
@@ -1014,6 +1014,17 @@ class TestClimaMisurato(unittest.TestCase):
         out = self.ha.clima_da_stati(self.c, [
             self._s("sensor.xiron_0801_temp", "-1.0"), self._s("sensor.xiron_0801_bat", "ok")], self.ora)
         self.assertEqual(out, {"esterno": {"temp": -1.0}})
+
+    def test_temperatura_ferma_non_e_muto(self):
+        # temperatura identica da ore (last_updated vecchio) ma umidità appena arrivata
+        temp = {"id": "sensor.xiron_0801_temp", "stato": "22.5", "riportato": "",
+                "aggiornato": (self.ora - timedelta(hours=3)).isoformat()}
+        out = self.ha.clima_da_stati(self.c, [temp, self._s("sensor.xiron_0801_hum", "64", 2)], self.ora)
+        self.assertEqual(out["esterno"]["temp"], 22.5)
+        self.assertEqual(out["esterno"]["umidita"], 64)
+        # senza last_reported e senza cambi da 3 ore: non si dichiara muto (limite 6 ore)
+        out = self.ha.clima_da_stati(self.c, [temp], self.ora)
+        self.assertEqual(out["esterno"]["temp"], 22.5)
 
     def test_sensore_muto(self):
         out = self.ha.clima_da_stati(self.c, [self._s("sensor.xiron_0801_temp", "22", minuti_fa=180)], self.ora)
