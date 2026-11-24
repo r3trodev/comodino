@@ -137,12 +137,19 @@ def _eta_min(quando, adesso):
 
 
 def _eta_sensore(s, adesso):
-    """(minuti dall'ultima lettura, affidabile?). Con last_reported l'età è precisa; con il solo
-    last_updated è un limite superiore (un valore fermo non lo aggiorna)."""
-    eta = _eta_min(s.get("riportato"), adesso)
-    if eta is not None:
-        return eta, True
-    return _eta_min(s.get("aggiornato"), adesso), False
+    """(minuti dall'ultima lettura certa, la data è affidabile?).
+
+    last_updated cambia solo quando cambia il valore. last_reported, in teoria, a ogni
+    lettura: ma con RFLink, se il valore è identico, HA spesso non lo aggiorna (resta uguale a
+    last_updated). Ci si fida di last_reported solo quando è PIÙ RECENTE di last_updated,
+    cioè quando si vede che HA lo aggiorna davvero anche senza cambi di valore.
+    """
+    rip = _eta_min(s.get("riportato"), adesso)
+    agg = _eta_min(s.get("aggiornato"), adesso)
+    if rip is not None and agg is not None and rip < agg - 0.05:
+        return rip, True
+    eta = rip if rip is not None else agg
+    return eta, False
 
 
 def clima_da_stati(c, stati, adesso=None):

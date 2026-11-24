@@ -1026,8 +1026,21 @@ class TestClimaMisurato(unittest.TestCase):
         out = self.ha.clima_da_stati(self.c, [temp], self.ora)
         self.assertEqual(out["esterno"]["temp"], 22.5)
 
+    def test_valore_fermo_con_last_reported_non_aggiornato(self):
+        # RFLink: valore identico da 2 ore, HA non aggiorna nemmeno last_reported (uguale a last_updated)
+        fermo = (self.ora - timedelta(hours=2)).isoformat()
+        stati = [{"id": "sensor.xiron_0801_temp", "stato": "22.5", "riportato": fermo, "aggiornato": fermo},
+                 {"id": "sensor.xiron_0801_hum", "stato": "63", "riportato": fermo, "aggiornato": fermo}]
+        out = self.ha.clima_da_stati(self.c, stati, self.ora)
+        self.assertEqual(out["esterno"]["temp"], 22.5)      # non è "muto": limite di 6 ore
+        # se invece last_reported è più recente di last_updated, ci si fida (limite 1 ora)
+        stati[0]["riportato"] = (self.ora - timedelta(minutes=70)).isoformat()
+        stati[1]["riportato"] = (self.ora - timedelta(minutes=70)).isoformat()
+        out = self.ha.clima_da_stati(self.c, stati, self.ora)
+        self.assertEqual(out["esterno"], {"vecchio": True})
+
     def test_sensore_muto(self):
-        out = self.ha.clima_da_stati(self.c, [self._s("sensor.xiron_0801_temp", "22", minuti_fa=180)], self.ora)
+        out = self.ha.clima_da_stati(self.c, [self._s("sensor.xiron_0801_temp", "22", minuti_fa=7 * 60)], self.ora)
         self.assertEqual(out, {"esterno": {"vecchio": True}})
         out = self.ha.clima_da_stati(self.c, [self._s("sensor.xiron_0801_temp", "unavailable")], self.ora)
         self.assertEqual(out, {})
