@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!-- Menu vuoti: niente "Exit" a portata di dito. -->
+<openbox_menu>
+  <menu id="root-menu" label=""/>
+  <menu id="client-menu" label=""/>
+</openbox_menu>

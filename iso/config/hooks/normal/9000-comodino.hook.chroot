@@ -31,15 +31,14 @@ ln -sf /usr/share/zoneinfo/Europe/Rome /etc/localtime
 echo 'Europe/Rome' > /etc/timezone
 systemctl enable systemd-timesyncd.service || true
 
-# SSH solo con chiave; se non è stata fornita una chiave, SSH resta spento
+# SSH solo con chiave e solo per l'utente comodino (sshd-comodino.conf): resta sempre acceso,
+# ma finché ~/.ssh/authorized_keys è vuoto nessuno può entrare. Basta aggiungere una chiave.
+install -d -m 700 -o comodino -g comodino /home/comodino/.ssh
 if [ -f /etc/comodino/authorized_keys ]; then
-    install -d -m 700 -o comodino -g comodino /home/comodino/.ssh
     install -m 600 -o comodino -g comodino /etc/comodino/authorized_keys /home/comodino/.ssh/authorized_keys
     rm -f /etc/comodino/authorized_keys
-    systemctl enable ssh.service
-else
-    systemctl disable ssh.service || true
 fi
+systemctl enable ssh.service
 [ -f /etc/NetworkManager/system-connections/casa.nmconnection ] && \
     chmod 600 /etc/NetworkManager/system-connections/casa.nmconnection
 

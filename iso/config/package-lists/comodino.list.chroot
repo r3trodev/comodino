@@ -59,4 +59,7 @@ qt6-virtualkeyboard-plugin
 # --- manutenzione
 efibootmgr
 openssh-server
+# compositor con spegnimento del display (di notte) + comando per farlo; cage resta come riserva
+labwc
+wlopm
 nano

@@ -1161,3 +1161,55 @@ class TestUnisciClima(unittest.TestCase):
         # muto davvero: non si copre
         d, _ = unisci_clima({"interno": {"vecchio": True}}, v, 1100)
         self.assertEqual(d["interno"], {"vecchio": True})
+
+
+# ---------------------------------------------------------------- v0.10.1: display (labwc + wlopm)
+class TestDisplay(unittest.TestCase):
+    def test_spegni_e_accendi(self):
+        from comodino.display import Display
+        chiamate = []
+
+        def esegui(args):
+            chiamate.append(args)
+            return 0, "DSI-1 on"
+        d = Display("wlopm", esegui=esegui)
+        self.assertTrue(d.spegni())
+        self.assertFalse(d.acceso)
+        self.assertTrue(d.spegni())                      # già spento: nessun comando in più
+        self.assertTrue(d.accendi())
+        self.assertEqual(chiamate, [["wlopm"], ["wlopm", "--off", "*"], ["wlopm", "--on", "*"]])
+
+    def test_cage_non_supportato(self):
+        from comodino.display import Display
+        d = Display("wlopm", esegui=lambda a: (1, "ERROR: Wayland server does not support "
+                                                  "wlr-output-power-management-v1."))
+        self.assertFalse(d.spegni())                     # si ripiega sulla retroilluminazione
+        self.assertTrue(d.acceso)
+        self.assertFalse(d.stato()["supportato"])
+        self.assertIn("does not support", d.stato()["errore"])
+
+    def test_wlopm_assente(self):
+        from comodino.display import Display
+        d = Display("comando-che-non-esiste-xyz")
+        self.assertFalse(d.spegni())
+
+
+class TestCursoreVuoto(unittest.TestCase):
+    def test_tema(self):
+        import importlib.util
+        import struct
+        spec = importlib.util.spec_from_file_location(
+            "cursore_vuoto", os.path.join(os.path.dirname(__file__), "..", "system", "cursore_vuoto.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with tempfile.TemporaryDirectory() as d:
+            tema = mod.crea(d)
+            with open(os.path.join(tema, "cursors", "left_ptr"), "rb") as f:
+                dati = f.read()
+        magic, hsize, ver, ntoc = struct.unpack("<4sIII", dati[:16])
+        self.assertEqual((magic, hsize, ntoc), (b"Xcur", 16, 1))
+        tipo, lato, pos = struct.unpack("<III", dati[16:28])
+        self.assertEqual(pos, 28)
+        w, h = struct.unpack("<II", dati[pos + 16:pos + 24])
+        self.assertEqual(len(dati), pos + 36 + w * h * 4)
+        self.assertEqual(set(dati[pos + 36:]), {0})      # tutto trasparente

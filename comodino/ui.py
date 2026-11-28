@@ -27,6 +27,7 @@ from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 from . import (allerte, config, geocode, homeassistant, icsparse, luna, muffa, ota, proxmox,  # noqa: E402
                sistema, terremoti, weather)
 from .storico import Storico  # noqa: E402
+from .display import Display  # noqa: E402
 from .luminosita import Backlight  # noqa: E402
 from .homeassistant import HomeAssistant  # noqa: E402
 from .webconfig import WebConfig  # noqa: E402
@@ -84,6 +85,8 @@ class Backend(QObject):
         self._errore = ""
         self._awake_until = 0.0
         self.backlight = Backlight(cfg["schermo"]["retroilluminazione"])
+        self.display = Display()
+        self.display.accendi(forza=True)     # se l'app è ripartita a display spento
         self._wake = {k: threading.Event() for k in ("meteo", "agenda", "ha", "allerte", "server", "terremoti")}
         self._allerte = []
         self._server = {"configurato": False}
@@ -198,7 +201,7 @@ class Backend(QObject):
 
     @Property("QVariantMap", notify=configChanged)
     def luminosita(self):
-        return self.backlight.stato()
+        return dict(self.backlight.stato(), display=self.display.stato())
 
     @Property(int, notify=configChanged)
     def rotazione(self):
@@ -526,8 +529,13 @@ class Backend(QObject):
             self._spento = spento
             self.spentoChanged.emit()
         if spento:
-            self.backlight.spegni()
+            # display davvero spento (labwc + wlopm); se non si può, retroilluminazione a 0
+            if not self.display.spegni():
+                self.backlight.spegni()
             return
+        if not self.display.acceso:
+            self.display.accendi()
+            force = True
         if bright:
             livello = s["luminosita_giorno"]
         elif alba >= 0:          # alba simulata: la luce sale piano fino al livello di giorno

@@ -99,8 +99,11 @@ si trova da sola per RFLink (`sensor.xxx_temp` → `sensor.xxx_bat`), oppure si 
 quando è scarica compare «cambia la pila del termometro».
 
 ### Schermo spento di notte
-In ⚙️ → 🖥️ Schermo → «Di notte lo schermo: Spento» la retroilluminazione si spegne nella fascia
-notturna (luminosità 0 e, se il driver lo consente, `bl_power=4`). Si riaccende per qualche
+In ⚙️ → 🖥️ Schermo → «Di notte lo schermo: Spento» il display si spegne nella fascia notturna.
+Con **labwc** (compositor predefinito dalla 0.10.1) il display viene spento davvero tramite
+`wlopm` (protocollo wlr-output-power-management): su molti pannelli, come quello del Chuwi,
+la retroilluminazione a 0 lascia un bagliore. Con cage (che non supporta lo spegnimento) si
+ripiega su luminosità 0 e `bl_power=4`. Si riaccende per qualche
 secondo con un tocco (il primo tocco non arriva ai pulsanti), da sola prima della sveglia con
 l'alba simulata, quando suona, e per un minuto quando compare un avviso importante nuovo
 (terremoto forte, allerta arancione o rossa).

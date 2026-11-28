@@ -1,4 +1,9 @@
 # Login automatico su tty1 -> interfaccia kiosk. Sulle altre console: shell normale.
+# Usa lo script di avvio della versione aggiornata (OTA) se c'è, altrimenti quello della ISO.
 if [ "$(tty)" = "/dev/tty1" ]; then
+    S="$HOME/.local/share/comodino/attuale/system/start-kiosk.sh"
+    if [ -f "$S" ] && sh -n "$S" 2>/dev/null; then
+        exec sh "$S"
+    fi
     exec /opt/comodino/system/start-kiosk.sh
 fi

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- labwc per il Comodino: una sola app a tutto schermo, niente bordi né menu.
+     Si usa labwc invece di cage perché supporta lo spegnimento del display
+     (wlr-output-power-management, comando wlopm): di notte lo schermo si spegne del tutto. -->
+<labwc_config>
+  <theme>
+    <keepBorder>no</keepBorder>
+  </theme>
+  <windowRules>
+    <windowRule identifier="*" serverDecoration="no"/>
+  </windowRules>
+  <!-- un tocco sullo "sfondo" (es. mentre l'app si riavvia) non apre il menu Configura/Esci -->
+  <mouse>
+    <default/>
+    <context name="Root">
+      <mousebind button="Left" action="Press"><action name="None"/></mousebind>
+      <mousebind button="Right" action="Press"><action name="None"/></mousebind>
+      <mousebind button="Middle" action="Press"><action name="None"/></mousebind>
+    </context>
+  </mouse>
+</labwc_config>
