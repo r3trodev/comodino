@@ -98,6 +98,13 @@ Se il sensore non trasmette da più di un'ora si torna alla previsione. La pila 
 si trova da sola per RFLink (`sensor.xxx_temp` → `sensor.xxx_bat`), oppure si indica a mano;
 quando è scarica compare «cambia la pila del termometro».
 
+### Schermo spento di notte
+In ⚙️ → 🖥️ Schermo → «Di notte lo schermo: Spento» la retroilluminazione si spegne nella fascia
+notturna (luminosità 0 e, se il driver lo consente, `bl_power=4`). Si riaccende per qualche
+secondo con un tocco (il primo tocco non arriva ai pulsanti), da sola prima della sveglia con
+l'alba simulata, quando suona, e per un minuto quando compare un avviso importante nuovo
+(terremoto forte, allerta arancione o rossa).
+
 ### Muffa, grafico, terremoti
 - **Rischio muffa** (serve il termometro dentro): stima la temperatura dell'angolo più freddo
   del muro (fattore fRsi, UNI EN ISO 13788, scelto in «Da PC» come isolamento scarso/medio/buono)

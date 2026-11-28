@@ -62,6 +62,7 @@ class Backend(QObject):
     _allertePronte = Signal(object)
     _serverPronto = Signal(object)
     terremotiChanged = Signal()
+    spentoChanged = Signal()
     _terremotiPronti = Signal(object)
     storicoChanged = Signal()
     muffaChanged = Signal()
@@ -77,6 +78,9 @@ class Backend(QObject):
                          "suona": False, "prossima": None, "snooze_fino": None,
                          "connessa": False}
         self._notte = False
+        self._spento = False
+        self._avvisi_visti = set()
+        self._fonti_avvisi = set()
         self._errore = ""
         self._awake_until = 0.0
         self.backlight = Backlight(cfg["schermo"]["retroilluminazione"])
@@ -142,6 +146,10 @@ class Backend(QObject):
     def notte(self):
         return self._notte
 
+    @Property(bool, notify=spentoChanged)
+    def schermoSpento(self):
+        return self._spento
+
     @Property(str, notify=erroreChanged)
     def errore(self):
         return self._errore
@@ -167,6 +175,7 @@ class Backend(QObject):
             "telefono": bool(c["homeassistant"]["sveglia_ora"]),
             "layout": c["schermo"]["layout"],
             "notte_stile": c["schermo"]["notte_stile"],
+            "notte_spento": bool(c["schermo"].get("notte_spento", False)),
             "notte_inizio": c["schermo"]["notte_inizio"],
             "notte_fine": c["schermo"]["notte_fine"],
             "luminosita_giorno": c["schermo"]["luminosita_giorno"],
@@ -337,6 +346,7 @@ class Backend(QObject):
     @Slot(object)
     def _set_terremoti(self, eventi):
         dati = {"eventi": eventi, "avviso": terremoti.avviso(eventi)}
+        self._risveglia_per_avvisi("terremoti", ["tq:" + e["id"] for e in eventi if e["forte"]])
         if dati != self._terremoti:
             self._terremoti = dati
             self.terremotiChanged.emit()
@@ -382,6 +392,8 @@ class Backend(QObject):
 
     @Slot(object)
     def _set_allerte(self, dati):
+        # arancione e rossa: accendono lo schermo la prima volta che compaiono
+        self._risveglia_per_avvisi("allerte", [f"al:{a['testo']}:{a.get('dalle', '')}" for a in dati if a["livello"] >= 3])
         if dati != self._allerte:
             self._allerte = dati
             self.allerteChanged.emit()
@@ -509,6 +521,13 @@ class Backend(QObject):
             self.albaChanged.emit()
         bright = (self._sveglia.get("suona") or not night
                   or time.monotonic() < self._awake_until)
+        spento = (night and bool(s.get("notte_spento")) and not bright and alba < 0)
+        if spento != self._spento:
+            self._spento = spento
+            self.spentoChanged.emit()
+        if spento:
+            self.backlight.spegni()
+            return
         if bright:
             livello = s["luminosita_giorno"]
         elif alba >= 0:          # alba simulata: la luce sale piano fino al livello di giorno
@@ -539,6 +558,24 @@ class Backend(QObject):
         """Un tocco durante l'alba la nasconde fino alla sveglia."""
         self._alba_nascosta = self._sveglia.get("prossima")
         self._update_screen()
+
+    def _risveglia_per_avvisi(self, fonte, chiavi):
+        """Un avviso importante MAI visto prima accende lo schermo per un minuto.
+        Alla prima lettura di ogni fonte (avvio dell'app) si memorizza soltanto."""
+        chiavi = set(chiavi)
+        nuove = chiavi - self._avvisi_visti
+        self._avvisi_visti |= chiavi
+        if fonte not in self._fonti_avvisi:
+            self._fonti_avvisi.add(fonte)
+            return
+        if nuove and self._notte:
+            self._awake_until = max(self._awake_until, time.monotonic() + 60)
+            self._update_screen()
+
+    @Slot(bool)
+    def impostaNotteSpento(self, on):
+        self._salva({"schermo": {"notte_spento": bool(on)}})
+        self._update_screen(force=True)
 
     @Slot()
     def tocco(self):

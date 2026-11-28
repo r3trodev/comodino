@@ -27,6 +27,7 @@ DEFAULT = {
         "luminosita_giorno": 70,        # percento
         "luminosita_notte": 3,
         "risveglio_tocco_sec": 20,
+        "notte_spento": False,          # di notte retroilluminazione spenta (si riaccende col tocco)
         "alba_min": 20,                 # alba simulata: minuti prima della sveglia (0 = off)
     },
     "sveglia": {

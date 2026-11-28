@@ -411,6 +411,18 @@ class TestLuminosita(unittest.TestCase):
         if os.geteuid() != 0:
             self.assertIn("logind: Access denied", b.stato()["errore"])
 
+    def test_spegni_e_riaccendi(self):
+        root = fake_backlight(("intel_backlight", "raw", 100))
+        (root / "intel_backlight" / "bl_power").write_text("0\n")
+        b = luminosita.Backlight(base=root)
+        b.set(40)
+        b.spegni()
+        self.assertEqual((root / "intel_backlight" / "brightness").read_text(), "0")
+        self.assertEqual((root / "intel_backlight" / "bl_power").read_text(), "4")
+        b.set(40)                                  # stesso livello di prima: deve riscrivere
+        self.assertEqual((root / "intel_backlight" / "brightness").read_text(), "40")
+        self.assertEqual((root / "intel_backlight" / "bl_power").read_text(), "0")
+
     def test_nessun_dispositivo(self):
         b = luminosita.Backlight(base="/percorso/inesistente")
         b.set(50)

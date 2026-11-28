@@ -506,6 +506,27 @@ Rectangle {
                         onCambiato: (v) => backend.impostaNotte(pag.imp.notte_inizio, v)
                     }
                 }
+                RowLayout {
+                    spacing: 18 * pag.u
+                    Text { text: "Di notte lo schermo"; color: pag.tema.testo; font.pixelSize: 32 * pag.u }
+                    BigButton {
+                        tema: pag.tema; u: pag.u
+                        text: "Luce bassa"
+                        primary: !pag.imp.notte_spento
+                        onClicked: backend.impostaNotteSpento(false)
+                    }
+                    BigButton {
+                        tema: pag.tema; u: pag.u
+                        text: "Spento"
+                        primary: !!pag.imp.notte_spento
+                        onClicked: backend.impostaNotteSpento(true)
+                    }
+                }
+                Nota {
+                    tema: pag.tema; u: pag.u
+                    visible: !!pag.imp.notte_spento
+                    text: "Si riaccende con un tocco, prima della sveglia (alba) e con avvisi importanti (terremoto forte, allerta arancione o rossa)."
+                }
                 Item { Layout.fillHeight: true }
             }
 

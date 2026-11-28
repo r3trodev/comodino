@@ -76,6 +76,7 @@ class Backlight:
     def set(self, percent, force=False):
         if not self.dev or (percent == self.current and not force):
             return
+        self._riaccendi_pannello()
         mx = _int(self.dev / "max_brightness") or 1
         val = max(1, round(mx * max(1, min(100, percent)) / 100))
         try:
@@ -89,6 +90,34 @@ class Backlight:
             self.metodo = "logind"
         self.current = percent
         self.errore = ""
+
+    def spegni(self):
+        """Retroilluminazione spenta: luminosità 0 e, se il driver lo permette, bl_power=4
+        (FB_BLANK_POWERDOWN). Il touch continua a funzionare."""
+        if not self.dev or self.current == 0:
+            return
+        try:
+            (self.dev / "brightness").write_text("0")
+            self.metodo = "sysfs"
+        except OSError:
+            ok, err = self.logind(self.dev.name, 0)
+            if not ok:
+                self.errore = f"spegnimento negato; logind: {err or 'non disponibile'}"
+                return
+            self.metodo = "logind"
+        try:
+            (self.dev / "bl_power").write_text("4")
+        except OSError:
+            pass                      # non tutti i driver lo hanno o lo rendono scrivibile
+        self.current = 0
+        self.errore = ""
+
+    def _riaccendi_pannello(self):
+        if self.dev and self.current == 0:
+            try:
+                (self.dev / "bl_power").write_text("0")
+            except OSError:
+                pass
 
     def stato(self):
         return {

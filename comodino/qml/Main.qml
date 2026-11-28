@@ -515,6 +515,19 @@ ApplicationWindow {
             onPressed: function (mouse) { backend.tocco(); mouse.accepted = false }
         }
 
+        // Schermo spento di notte: nero sopra tutto. Il primo tocco riaccende soltanto,
+        // senza arrivare ai pulsanti sotto (niente "spegni sveglia" per sbaglio).
+        Rectangle {
+            anchors.fill: parent
+            z: 950
+            visible: backend.schermoSpento
+            color: "black"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: backend.tocco()
+            }
+        }
+
         AlarmDialog { id: dialogSveglia; anchors.fill: parent; z: 500; tema: temaApp; u: win.u }
         Avvisi { id: elencoAvvisi; anchors.fill: parent; z: 500; tema: temaApp; u: win.u; avvisi: win.avvisi }
 
